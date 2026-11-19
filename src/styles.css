@@ -1,0 +1,799 @@
+/* ============ توکن‌های تم — تیره، حداقل، به سبک Claude ============ */
+:root {
+  --bg: #1a1a1a;
+  --surface: #222222;
+  --surface2: #2a2a2a;
+  --surface3: #303030;
+  --border: #333333;
+  --text: #e8e6e1;
+  --muted: #9a978f;
+  --accent: #d97757;
+  --accent-hover: #e08a6d;
+  --accent-pressed: #c4664a;
+  --on-accent: #1a120e;
+  --success: #62bd87;
+  --warning: #d9a557;
+  --error: #c96b6b;
+  --radius: 10px;
+  --radius-sm: 8px;
+  --font: "Vazirmatn", Tahoma, "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+
+/* فونت فارسی — باندل‌شده به صورت محلی (بدون CDN، آفلاین کار می‌کند) */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("fonts/Vazirmatn-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("fonts/Vazirmatn-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("fonts/Vazirmatn-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("fonts/Vazirmatn-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+* { box-sizing: border-box; }
+
+/* خاصیت hidden را همیشه قوی‌تر از استایل‌های display نگه دار */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  user-select: none;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ============ نوار کنار ============ */
+#sidebar {
+  width: 200px;
+  flex: 0 0 200px;
+  background: var(--surface);
+  border-inline-start: none;
+  border-inline-end: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 4px 8px 20px;
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  flex: 0 0 22px;
+}
+
+#sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  text-align: start;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+
+.nav-item.active {
+  background: var(--surface3);
+  color: var(--text);
+}
+
+.nav-icon { width: 18px; text-align: center; opacity: 0.8; }
+
+.profiles-panel {
+  border-top: 1px solid var(--border);
+  padding: 14px 0 10px;
+  margin-top: 14px;
+}
+
+.profiles-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profiles-panel-head .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-item-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.profile-item-row.active { background: var(--surface3); }
+
+.profile-item {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.profile-item:hover { background: var(--surface2); color: var(--text); }
+.profile-item-row.active .profile-item { color: var(--text); }
+
+.profile-delete {
+  flex: 0 0 30px;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.profile-delete:hover {
+  background: rgba(201, 107, 107, 0.12);
+  color: var(--error);
+}
+
+.profile-item-name { display: block; font-weight: 600; }
+
+.profile-item-path {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+  direction: ltr;
+  unicode-bidi: plaintext;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.profiles-empty {
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schedule-section {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-bottom: 14px;
+}
+
+.schedule-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.check-row { gap: 8px; }
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.schedule-body { padding-inline-start: 2px; }
+
+.schedule-body .field { margin-bottom: 10px; }
+
+.schedule-body select,
+.schedule-body input[type="time"] {
+  width: auto;
+  min-width: 150px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 8px 10px;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  direction: ltr;
+  text-align: start;
+}
+
+/* ============ ناحیه اصلی ============ */
+#main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 40px;
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+.view-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 20px;
+}
+
+.muted { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+/* ============ کارت ============ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.card-title { font-weight: 600; font-size: 14.5px; }
+
+/* ============ فرم ============ */
+.field { margin-bottom: 14px; }
+
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.field.inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field.inline label { margin-bottom: 0; }
+
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input:focus, select:focus, textarea:focus { border-color: #4a4a4a; }
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239a978f' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 12px center;
+  cursor: pointer;
+}
+
+input[type="number"] { width: 80px; direction: ltr; text-align: center; }
+
+textarea { resize: vertical; line-height: 1.7; }
+
+.path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.path-row input { flex: 1; }
+
+.path-row .btn { flex: 0 0 auto; }
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  min-height: 16px;
+}
+
+.hint.ok { color: var(--success); }
+.hint.err { color: var(--error); }
+
+#network-user, #network-password { margin-top: 6px; }
+
+details#advanced {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+details#advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  outline: none;
+}
+
+details#advanced summary:hover { color: var(--text); }
+
+.advanced-body { padding-top: 12px; }
+
+/* ============ دکمه‌ها ============ */
+.btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn.small { padding: 7px 13px; font-size: 12.5px; }
+
+.btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.primary:active { background: var(--accent-pressed); }
+
+.btn.secondary {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn.secondary:hover { background: var(--surface3); }
+
+.btn.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.btn.ghost:hover { color: var(--text); background: var(--surface2); }
+
+.btn.danger {
+  background: transparent;
+  color: var(--error);
+  border: 1px solid var(--border);
+}
+.btn.danger:hover { background: rgba(201, 107, 107, 0.1); }
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.btn.loading .btn-label { opacity: 0.55; }
+
+.btn.loading::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============ ردیف اجرا ============ */
+.action-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* ============ نوار پیشرفت ============ */
+.progressbar {
+  height: 3px;
+  background: var(--surface2);
+  border-radius: 2px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.progressbar.active { opacity: 1; }
+
+.progressbar .fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.progressbar .fill.indeterminate {
+  width: 30%;
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% { margin-inline-start: -30%; }
+  100% { margin-inline-start: 100%; }
+}
+
+/* ============ پیش‌نمایش تغییرات ============ */
+.preview-group { margin-bottom: 14px; }
+
+.preview-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.count-badge {
+  background: var(--surface3);
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 1px 9px;
+  font-size: 11.5px;
+  font-family: var(--mono);
+}
+
+.preview-files {
+  max-height: 150px;
+  overflow-y: auto;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.preview-files .file-line {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 2.5px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-files .file-line .size { color: var(--muted); margin-inline-end: 10px; }
+
+.new-dot { color: var(--success); }
+.changed-dot { color: var(--warning); }
+.deleted-dot { color: var(--error); }
+
+.preview-total {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+/* ============ اجرای زنده ============ */
+.run-stats {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.run-stats b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+
+.current-file {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-box {
+  height: 260px;
+  overflow-y: auto;
+  background: #191919;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.75;
+  user-select: text;
+}
+
+.log-box .log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  unicode-bidi: plaintext;
+}
+
+.log-box .log-line.err { color: var(--error); }
+.log-box .log-line.move { color: var(--warning); }
+.log-box .log-line.dim { color: var(--muted); }
+
+.summary-note {
+  margin-top: 12px;
+  color: var(--warning);
+  font-size: 12.5px;
+  border: 1px solid rgba(217, 165, 87, 0.35);
+  background: rgba(217, 165, 87, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  line-height: 1.9;
+  user-select: text;
+}
+
+/* ============ انتخاب متن (P1-12) ============
+   html/body روی user-select:none است؛ این نواحی باید قابل کپی باشند. */
+.log-box,
+#log-dialog-body,
+.summary-lastlines,
+.banner,
+.current-file,
+.preview-files .file-line,
+.hint,
+.summary-item { user-select: text; }
+
+/* بَج تاریخچه — قبلاً inline style بود (CSP) */
+.history-row .badge { min-width: 70px; justify-content: center; }
+
+/* نوار پیشرفت گام‌به‌گام وقتی حجم کل از پیش‌نمایش معلوم است */
+.progressbar .fill.determinate { width: 0%; animation: none; }
+
+/* ============ کارت خلاصه ============ */
+.summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 20px;
+  padding: 4px 13px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge::before { content: "●"; font-size: 9px; }
+
+.badge.success { color: var(--success); background: rgba(98, 189, 135, 0.12); }
+.badge.warnings { color: var(--warning); background: rgba(217, 165, 87, 0.12); }
+.badge.failed { color: var(--error); background: rgba(201, 107, 107, 0.12); }
+.badge.cancelled { color: var(--muted); background: var(--surface3); }
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
+.summary-item .label {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.summary-item .value {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.summary-lastlines {
+  margin-top: 14px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #191919;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--error);
+  line-height: 1.7;
+  user-select: text;
+}
+
+/* ============ بنرها ============ */
+#banner { margin-bottom: 14px; }
+
+.banner {
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  border: 1px solid;
+}
+
+.banner.error { color: var(--error); border-color: rgba(201, 107, 107, 0.35); background: rgba(201, 107, 107, 0.07); }
+.banner.info { color: var(--text); border-color: var(--border); background: var(--surface2); }
+.banner.warn { color: var(--warning); border-color: rgba(217, 165, 87, 0.35); background: rgba(217, 165, 87, 0.07); }
+
+.banner .banner-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+/* ============ تاریخچه ============ */
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.history-row:hover { background: var(--surface2); border-color: #3d3d3d; }
+
+.history-row .h-date { font-family: var(--mono); font-size: 12px; color: var(--muted); direction: ltr; min-width: 150px; }
+.history-row .h-name { font-size: 13px; flex: 1; }
+.history-row .h-counts { font-family: var(--mono); font-size: 12px; color: var(--muted); direction: ltr; }
+.history-row .h-duration { font-family: var(--mono); font-size: 12px; color: var(--muted); direction: ltr; min-width: 70px; text-align: end; }
+
+.empty-note {
+  color: var(--muted);
+  text-align: center;
+  padding: 60px 0;
+  font-size: 13px;
+}
+
+/* ============ پوشش لاگ ============ */
+#log-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.log-dialog {
+  width: min(820px, 90vw);
+  height: min(560px, 85vh);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.log-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+#log-dialog-body {
+  flex: 1;
+  margin: 0;
+  padding: 14px 18px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--text);
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ============ کلاس‌های جهت ============ */
+.ltr {
+  direction: ltr;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* اسکرول‌بار تیره */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3d3d3d; border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #4d4d4d; }
+
+/* انیمیشن‌های ظریف */
+.card, .history-row, .summary-item { animation: fadein 0.16s ease; }
+
+@keyframes fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Permissions for the main window: dialogs, notifications and core APIs.","local":true,"windows":["main"],"permissions":["core:default","dialog:default","notification:default"]}}

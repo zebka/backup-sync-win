@@ -1,0 +1,201 @@
+<!doctype html>
+<html dir="rtl" lang="fa">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بکاپ‌گیر شبکه</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ===== نوار کنار ===== -->
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <span>بکاپ‌گیر</span>
+      </div>
+      <nav>
+        <button class="nav-item active" data-view="backup">
+          <span class="nav-icon">⟳</span> بکاپ
+        </button>
+        <button class="nav-item" data-view="history">
+          <span class="nav-icon">☰</span> تاریخچه
+        </button>
+      </nav>
+      <div class="profiles-panel">
+        <div class="profiles-panel-head">
+          <span>پروفایل‌ها</span>
+          <button id="btn-new-profile" class="btn ghost small">جدید</button>
+        </div>
+        <div id="profile-list" class="profile-list"></div>
+        <div id="profiles-empty" class="profiles-empty">هنوز پروفایلی ذخیره نشده است.</div>
+      </div>
+      <div class="sidebar-footer">Backup Sync v1.0</div>
+    </aside>
+
+    <!-- ===== ناحیه اصلی ===== -->
+    <main id="main">
+
+      <!-- ---------- نمای بکاپ ---------- -->
+      <section id="view-backup" class="view active">
+        <h1 class="view-title">بکاپ</h1>
+
+        <!-- کارت پروفایل -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">پروفایل بکاپ</span>
+            <button id="btn-save-profile" class="btn ghost small">ذخیره پروفایل</button>
+          </div>
+
+          <div class="field">
+            <label for="profile-name">نام پروفایل</label>
+            <input id="profile-name" type="text" value="پیش‌فرض" />
+          </div>
+
+          <div class="field">
+            <label for="source">مسیر منبع <span class="muted">(شبکه یا محلی)</span></label>
+            <div class="path-row">
+              <input id="source" class="mono ltr" placeholder="\\PC-NAME\Share\Docs" spellcheck="false" />
+              <button id="browse-source" class="btn ghost small">مرور…</button>
+            </div>
+            <div class="hint" id="source-status"></div>
+          </div>
+
+          <div class="field">
+            <label for="destination">مسیر مقصد <span class="muted">(پوشه لوکال)</span></label>
+            <div class="path-row">
+              <input id="destination" class="mono ltr" placeholder="D:\Backups\Share" spellcheck="false" />
+              <button id="browse-dest" class="btn ghost small">مرور…</button>
+            </div>
+            <div class="hint" id="dest-status"></div>
+          </div>
+
+          <div class="field">
+            <label for="mode">حالت بکاپ</label>
+            <select id="mode">
+              <option value="safe">امن — فقط کپی جدید/تغییرکرده</option>
+              <option value="mirror_recycle">آینه با سطل بازیافت — حذفی‌ها به _Deleted</option>
+            </select>
+            <div class="hint" id="mode-hint">
+              فقط فایل‌های جدید یا تغییرکرده کپی می‌شوند. هیچ‌چیز حذف نمی‌شود.
+            </div>
+          </div>
+
+          <div class="schedule-section">
+            <div class="schedule-title">بررسی و بکاپ خودکار</div>
+            <div class="field inline check-row">
+              <label class="check-label" for="auto-start">
+                <input id="auto-start" type="checkbox" />
+                راه‌اندازی برنامه با ویندوز
+              </label>
+            </div>
+            <div class="field inline check-row">
+              <label class="check-label" for="schedule-enabled">
+                <input id="schedule-enabled" type="checkbox" />
+                اجرای خودکار این پروفایل
+              </label>
+            </div>
+            <div class="schedule-body" id="schedule-body" hidden>
+              <div class="field inline">
+                <label for="schedule-action">نوع اجرا</label>
+                <select id="schedule-action">
+                  <option value="backup">بکاپ واقعی</option>
+                  <option value="check">فقط بررسی تغییرات</option>
+                </select>
+              </div>
+              <div class="field inline">
+                <label for="schedule-frequency">تکرار</label>
+                <select id="schedule-frequency">
+                  <option value="daily">هر روز</option>
+                  <option value="weekly">هر هفته</option>
+                </select>
+              </div>
+              <div class="field inline">
+                <label for="schedule-time">ساعت اجرا</label>
+                <input id="schedule-time" type="time" value="21:30" />
+              </div>
+              <div class="field inline" id="weekday-row" hidden>
+                <label for="schedule-weekday">روز هفته</label>
+                <select id="schedule-weekday">
+                  <option value="0">شنبه</option>
+                  <option value="1">یکشنبه</option>
+                  <option value="2">دوشنبه</option>
+                  <option value="3">سه‌شنبه</option>
+                  <option value="4">چهارشنبه</option>
+                  <option value="5">پنجشنبه</option>
+                  <option value="6">جمعه</option>
+                </select>
+              </div>
+              <div class="hint">در اجرای خودکار رمز شبکه وارد نمی‌شود؛ اگر اشتراک رمز لازم داشته باشد اجرا با پیام خطا متوقف می‌شود. در حالت آینه هم حذف دسته‌جمعی به‌صورت قطعی رد می‌شود.</div>
+            </div>
+          </div>
+
+          <details id="advanced">
+            <summary>تنظیمات پیشرفته</summary>
+            <div class="advanced-body">
+              <div class="field inline">
+                <label for="threads">رشته‌های موازی کپی</label>
+                <input id="threads" type="number" min="1" max="128" value="8" />
+                <span class="muted">۸ پیش‌فرض؛ روی شبکه‌های کند کمتر بگذار</span>
+              </div>
+              <div class="field">
+                <label for="excludes">الگوهای حذف‌شده (هر خط یکی)</label>
+                <textarea id="excludes" class="mono ltr" rows="4">Thumbs.db
+~$*
+*.tmp
+desktop.ini</textarea>
+              </div>
+              <div class="field">
+                <label for="network-user">ورود به شبکه <span class="muted">(اختیاری — اگر اشتراک رمز می‌خواهد)</span></label>
+                <input id="network-user" type="text" class="ltr" placeholder="DOMAIN\user یا user" spellcheck="false" />
+                <input id="network-password" type="password" class="ltr" placeholder="رمز فقط در حافظه می‌ماند تا برنامه بسته شود" spellcheck="false" autocomplete="off" />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- banner بالای ردیف دکمه‌ها تا نتیجه همیشه دیده شود (P0-8) -->
+        <div id="banner"></div>
+
+        <!-- ردیف دکمه‌ها -->
+        <div class="action-row">
+          <button id="btn-preview" class="btn secondary">
+            <span class="btn-label">بررسی تغییرات</span>
+          </button>
+          <button id="btn-start" class="btn primary">
+            <span class="btn-label">شروع بکاپ</span>
+          </button>
+        </div>
+        <div class="progressbar" id="progressbar"><div class="fill indeterminate" id="progress-fill"></div></div>
+
+        <!-- ناحیه نتیجه: پیش‌نمایش / اجرای زنده / خلاصه -->
+        <div id="results">
+          <div id="preview-panel" hidden></div>
+          <div id="run-panel" hidden></div>
+          <div id="summary-panel" hidden></div>
+        </div>
+      </section>
+
+      <!-- ---------- نمای تاریخچه ---------- -->
+      <section id="view-history" class="view">
+        <h1 class="view-title">تاریخچه اجراها</h1>
+        <div id="history-list" class="history-list"></div>
+        <div id="history-empty" class="empty-note" hidden>هنوز اجرایی ثبت نشده است.</div>
+      </section>
+    </main>
+  </div>
+
+  <!-- پوشش نمایش لاگ -->
+  <div id="log-overlay" hidden>
+    <div class="log-dialog">
+      <div class="log-dialog-head">
+        <span id="log-dialog-title">لاگ اجرا</span>
+        <button id="btn-close-log" class="btn ghost small">بستن</button>
+      </div>
+      <pre id="log-dialog-body" class="mono ltr"></pre>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
