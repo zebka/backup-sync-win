@@ -74,6 +74,15 @@ pub fn tr(fa: &str, en: &str) -> String {
     }
 }
 
+/// نسخهٔ Format! ورودی‌های String.
+pub fn trf(fa: String, en: String) -> String {
+    if current_language() == "en" {
+        en
+    } else {
+        fa
+    }
+}
+
 #[cfg(windows)]
 pub fn is_auto_start_enabled() -> bool {
     std::process::Command::new("reg")

@@ -14,6 +14,8 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 pub struct AppState {
     pub root: PathBuf,
@@ -223,6 +225,22 @@ async fn run_scheduled_task(app: AppHandle, profile: Profile) {
 // ------------------------------------------------------------------
 // Commands (PLAN §8)
 // ------------------------------------------------------------------
+
+#[tauri::command]
+fn open_repo_url() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", "https://github.com/zebka/backup-sync-win"])
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .map_err(|e| settings::trf(
+                format!("باز کردن ریپو شکست خورد: {e}"),
+                format!("failed to open the repository: {e}"),
+            ))?;
+    }
+    Ok(())
+}
 
 #[tauri::command]
 fn get_settings() -> Result<settings::Settings, String> {
@@ -476,6 +494,7 @@ fn main() {
             get_settings,
             set_auto_start,
             set_language,
+            open_repo_url,
             delete_profile,
         ])
         .setup(|app| {

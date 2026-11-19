@@ -819,6 +819,11 @@ function wireUI() {
     }
   };
 
+  $("btn-github").addEventListener("click", (e) => {
+    e.preventDefault();
+    invoke("open_repo_url").catch((err) => showBanner("error", esc(String(err))));
+  });
+
   $("btn-preview").onclick = onPreview;
   $("btn-start").onclick = onStart;
   $("btn-new-profile").onclick = newProfileForm;
