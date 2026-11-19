@@ -1,58 +1,44 @@
-// Backup Sync — منطق فرانت‌اند (vanilla JS، بدون باندلر)
-// با window.__TAURI__ (withGlobalTauri) به بک‌اند Rust وصل می‌شود.
+// BackupSync — frontend logic (vanilla JS, no bundler)
+// Talks to the Rust backend via window.__TAURI__ (withGlobalTauri).
+
+import { I18N } from "./i18n.js";
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const { open: openDialog } = window.__TAURI__.dialog;
 
-// ------------------------------------------------------------------
-// وضعیت کلی
-// ------------------------------------------------------------------
+let LANG = "en";
+const t = (key, vars = {}) => {
+  let value = (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+  for (const [name, replacement] of Object.entries(vars)) {
+    value = value.replaceAll(`{${name}}`, String(replacement));
+  }
+  return value;
+};
+
 const state = {
   profileId: null,
   profiles: [],
-  runId: null,            // اجرای فعال
-  pendingRun: false,      // بین کلیک شروع و رسیدن runId (فاز آماده‌سازی)
-  preview: null,          // آخرین PreviewResult
+  runId: null,
+  pendingRun: false,
+  preview: null,
   startedAt: null,
   elapsedTimer: null,
-  totalFiles: null,       // از پیش‌نمایش
+  totalFiles: null,
   autoscroll: true,
   mirrorAcked: localStorage.getItem("mirror_ack") === "1",
-  allowMassDelete: false, // تأیید نگهبان حذف دسته‌جمعی (P0-6b)
-  advancedWasOpen: false, // بازگردانی وضعیت بخش پیشرفته بعد از اجرا (P0-8)
+  allowMassDelete: false,
+  advancedWasOpen: false,
 };
 
-// رمز فقط در متغیر ماژول (حافظه) می‌ماند — هرگز در DOM بعد از خواندن و هرگز در localStorage (P0-5)
 let passwordMem = null;
-
 const $ = (id) => document.getElementById(id);
-
 const DEFAULT_EXCLUDES = "Thumbs.db\n~$*\n*.tmp\ndesktop.ini";
+const RESULT_CLASS = { success: "success", warnings: "warnings", failed: "failed", cancelled: "cancelled" };
 
-const MODE_HINTS = {
-  safe: "فقط فایل‌های جدید یا تغییرکرده کپی می‌شوند. هیچ‌چیز حذف نمی‌شود.",
-  mirror_recycle:
-    "مقصد مطابق منبع می‌شود، اما فایل‌هایی که از منبع حذف شده‌اند به پوشه _Deleted در مقصد منتقل می‌شوند — نه حذف قطعی.",
-};
-
-const RESULT_CLASS = {
-  success: "success",
-  warnings: "warnings",
-  failed: "failed",
-  cancelled: "cancelled",
-};
-
-const RESULT_FA = {
-  success: "موفق",
-  warnings: "با هشدار",
-  failed: "شکست",
-  cancelled: "لغو",
-};
-
-// ------------------------------------------------------------------
-// کمکی‌ها
-// ------------------------------------------------------------------
+// ----------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------
 function fmtBytes(n) {
   if (n == null) return "—";
   const num = Number(n);
@@ -71,7 +57,6 @@ function fmtElapsed(ms) {
   return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-// P1-12: escape کامل کاراکترهای HTML به‌همراه " و '
 function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -81,9 +66,7 @@ function esc(s) {
     .replace(/'/g, "&#39;");
 }
 
-function safeResultClass(r) {
-  return RESULT_CLASS[r] || "failed";
-}
+function safeResultClass(r) { return RESULT_CLASS[r] || "failed"; }
 
 function reveal(el) {
   if (el && typeof el.scrollIntoView === "function") {
@@ -116,12 +99,38 @@ function resetProgressBar() {
   }
 }
 
-// ------------------------------------------------------------------
-// فرم پروفایل و اعتبارسنجی
-// ------------------------------------------------------------------
+function applyI18n() {
+  document.documentElement.lang = LANG === "fa" ? "fa" : "en";
+  document.documentElement.dir = LANG === "fa" ? "rtl" : "ltr";
+  document.title = LANG === "fa" ? "بکاپ‌گیر شبکه" : "BackupSync — Windows Network Backup";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-value]").forEach((el) => {
+    if (el.dataset.i18nValue === "profile.defaultName" && !el.value) {
+      el.value = t("profile.defaultName");
+    }
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+    el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel));
+  });
+  $("mode-hint").textContent = modeHint($("mode").value);
+}
+
+function applyLanguageToDynamic() {
+  applyI18n();
+  renderProfiles();
+  if (state.preview) renderPreview(state.preview);
+}
+
+// ----------------------------------------------------------------
+// Path helpers and UI state
+// ----------------------------------------------------------------
 function pathKey(p) {
   let s = String(p || "").trim().replace(/\//g, "\\");
-  // ریشهٔ درایو "X:\" دست‌نخورده؛ بقیهٔ بک‌اسلش‌ها حذف می‌شوند
   if (s.length === 3 && s[1] === ":" && s.endsWith("\\")) return s.toLowerCase();
   while (s.length > 1 && s.endsWith("\\")) s = s.slice(0, -1);
   return s.toLowerCase();
@@ -139,10 +148,10 @@ function renderProfiles() {
   list.innerHTML = items.map((p) => `
     <div class="profile-item-row${p.id === state.profileId ? " active" : ""}">
       <button class="profile-item" data-profile-id="${esc(p.id)}">
-        <span class="profile-item-name">${esc(p.name || "پیش‌فرض")}</span>
+        <span class="profile-item-name">${esc(p.name || t("profile.defaultName"))}</span>
         <span class="profile-item-path ltr">${esc(p.destination || "")}</span>
       </button>
-      <button class="profile-delete" data-delete-id="${esc(p.id)}" aria-label="حذف پروفایل">×</button>
+      <button class="profile-delete" data-delete-id="${esc(p.id)}" aria-label="${t("profiles.deleteAria")}">×</button>
     </div>`).join("");
   list.querySelectorAll(".profile-item").forEach((btn) => {
     btn.onclick = () => selectProfile(btn.dataset.profileId);
@@ -155,12 +164,15 @@ function renderProfiles() {
 function requestDeleteProfile(id) {
   const p = state.profiles.find((x) => x.id === id);
   if (!p) return;
-  showBanner("warn",
-    `آیا پروفایل «${esc(p.name || "پیش‌فرض")}» حذف شود؟ فایل‌های منبع و مقصد حذف نمی‌شوند.` +
-    `<div class="banner-actions">
-       <button class="btn danger small" id="profile-delete-yes">بله، حذف شود</button>
-       <button class="btn ghost small" id="profile-delete-no">انصراف</button>
-     </div>`);
+  const name = esc(p.name || t("profile.defaultName"));
+  showBanner(
+    "warn",
+    `${t("banner.deleteProfile", { name })}` +
+      `<div class="banner-actions">
+         <button class="btn danger small" id="profile-delete-yes">${t("banner.deleteProfileYes")}</button>
+         <button class="btn ghost small" id="profile-delete-no">${t("banner.deleteProfileNo")}</button>
+       </div>`
+  );
   $("profile-delete-yes").onclick = () => deleteConfirmedProfile(id);
   $("profile-delete-no").onclick = () => clearBanner();
 }
@@ -176,7 +188,7 @@ async function deleteConfirmedProfile(id) {
     } else {
       renderProfiles();
     }
-    showBanner("info", "پروفایل حذف شد ✓");
+    showBanner("info", t("banner.saved"));
     setTimeout(clearBanner, 2500);
   } catch (e) {
     showBanner("error", esc(String(e)));
@@ -188,7 +200,7 @@ async function reloadProfiles(selectId = state.profileId) {
     state.profiles = await invoke("load_profiles");
   } catch (e) {
     state.profiles = [];
-    showBanner("error", "خواندن پروفایل‌ها شکست خورد: " + esc(String(e)));
+    showBanner("error", `${t("error.saveProfile")}: ${esc(String(e))}`);
   }
   if (selectId && state.profiles.some((p) => p.id === selectId)) {
     state.profileId = selectId;
@@ -207,7 +219,7 @@ function newProfileForm() {
   state.profileId = null;
   fillForm({
     id: null,
-    name: "پیش‌فرض",
+    name: t("profile.defaultName"),
     source: "",
     destination: "",
     mode: "safe",
@@ -218,15 +230,13 @@ function newProfileForm() {
   renderProfiles();
 }
 
-function updateScheduleUI() {
-  const enabled = $("schedule-enabled").checked;
-  $("schedule-body").hidden = !enabled;
-  $("weekday-row").hidden = $("schedule-frequency").value !== "weekly";
+function modeHint(mode) {
+  return mode === "mirror_recycle" ? t("mode.mirrorHint") : t("mode.safeHint");
 }
 
 function fillForm(p) {
   state.profileId = p.id || null;
-  $("profile-name").value = p.name || "پیش‌فرض";
+  $("profile-name").value = p.name || t("profile.defaultName");
   $("source").value = p.source || "";
   $("destination").value = p.destination || "";
   $("mode").value = p.mode || "safe";
@@ -241,23 +251,32 @@ function fillForm(p) {
   $("schedule-time").value = p.scheduleTime || "21:30";
   $("schedule-weekday").value = String(p.scheduleWeekday ?? 0);
   updateScheduleUI();
-  $("mode-hint").textContent = MODE_HINTS[$("mode").value] || MODE_HINTS.safe;
+  applyI18n();
 }
 
-function collectRawExcludes() {
-  return $("excludes").value
-    .split("\n")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+// applyI18n updates element placeholders/labels; renderProfiles and fillForm must
+// run after it for dynamic translations.
+function applyAll() {
+  applyI18n();
+  renderProfiles();
+}
+
+function updateScheduleUI() {
+  const enabled = $("schedule-enabled").checked;
+  $("schedule-body").hidden = !enabled;
+  $("weekday-row").hidden = $("schedule-frequency").value !== "weekly";
 }
 
 function collectForm() {
-  const excludes = collectRawExcludes();
+  const excludes = $("excludes").value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
   const threads = Math.max(1, Math.min(128, parseInt($("threads").value, 10) || 8));
   const user = $("network-user").value.trim();
   return {
     id: state.profileId || newProfileId(),
-    name: $("profile-name").value.trim() || "پیش‌فرض",
+    name: $("profile-name").value.trim() || t("profile.defaultName"),
     source: $("source").value.trim(),
     destination: $("destination").value.trim(),
     mode: $("mode").value,
@@ -272,21 +291,14 @@ function collectForm() {
   };
 }
 
-// P1-12: اعتبارسنجی در save و start (و پیش‌نمایش)
 function validateProfile(profile) {
   if (!profile.source || !profile.destination) {
-    return "مسیر منبع و مقصد را وارد کن.";
+    return t("error.emptyPaths");
   }
-  const rawLines = $("excludes").value.split("\n");
-  // رد کردن خطوطی که فقط فاصله دارند ممنوع نیست (اگر بین خطوط باشد)، اما اگر با / شروع شود خطا بده
   for (const p of profile.excludes) {
-    if (!p) return "الگوی حذف نمی‌تواند خالی باشد.";
-    if (p.startsWith("/")) {
-      return `الگوی حذف با «/» شروع می‌شود و به‌عنوان سوییچ robocopy خوانده می‌شود: ${p}`;
-    }
+    if (!p) return t("error.emptyExclude");
+    if (p.startsWith("/")) return t("error.excludeSlash", { pattern: p });
   }
-  // اگر کاربر عمداً تنها یک خط خالی گذاشته نیست، اوکی است
-  void rawLines;
   return null;
 }
 
@@ -294,19 +306,18 @@ function validateSave(profile) {
   const base = validateProfile(profile);
   if (base) return base;
   if (profile.scheduleEnabled && !/^[0-2]\d:[0-5]\d$/.test(profile.scheduleTime || "")) {
-    return "ساعت زمان‌بندی نامعتبر است (مثال 21:30).";
+    return t("error.scheduleTime");
   }
   if (pathKey(profile.source) === pathKey(profile.destination)) {
-    return "مسیر منبع و مقصد نمی‌توانند یکسان باشند.";
+    return t("error.samePath");
   }
   const exists = state.profiles.some((p) => p.id === profile.id);
   if (!exists && state.profiles.length >= 3) {
-    return "حداکثر سه پروفایل قابل ذخیره است.";
+    return t("error.maxProfiles");
   }
   return null;
 }
 
-// P0-5: رمز در حافظه می‌ماند؛ پس از خواندن از DOM پاک می‌شود
 function takePassword() {
   const field = $("network-password");
   if (field && field.value) {
@@ -316,9 +327,6 @@ function takePassword() {
   return passwordMem || null;
 }
 
-// ------------------------------------------------------------------
-// چک مسیر با تایپ
-// ------------------------------------------------------------------
 async function checkPathInput(inputId, hintId) {
   const path = $(inputId).value.trim();
   const hint = $(hintId);
@@ -326,16 +334,16 @@ async function checkPathInput(inputId, hintId) {
   try {
     const res = await invoke("check_path", { path });
     if (res.exists && res.isDir) {
-      hint.textContent = "✓ پوشه موجود است";
+      hint.textContent = t("path.ok");
       hint.className = "hint ok";
     } else if (res.exists) {
-      hint.textContent = "✖ این مسیر پوشه نیست";
+      hint.textContent = t("path.notDir");
       hint.className = "hint err";
-    } else if (res.error && res.error.includes("سرور در دسترس نیست")) {
-      hint.textContent = "✖ سرور در دسترس نیست";
+    } else if (res.error && (res.error.includes("The server is unreachable") || res.error.includes("سرور در دسترس نیست"))) {
+      hint.textContent = t("path.unreachable");
       hint.className = "hint err";
     } else {
-      hint.textContent = "✖ پیدا نشد — مسیر یا دسترسی را چک کن";
+      hint.textContent = t("path.notFound");
       hint.className = "hint err";
     }
   } catch {
@@ -344,9 +352,6 @@ async function checkPathInput(inputId, hintId) {
   }
 }
 
-// ------------------------------------------------------------------
-// پیش‌نمایش تغییرات
-// ------------------------------------------------------------------
 function renderPreview(res) {
   state.preview = res;
   const panel = $("preview-panel");
@@ -360,25 +365,25 @@ function renderPreview(res) {
       (f) => `<div class="file-line ltr"><span class="size">${fmtBytes(f.size)}</span>${esc(f.path)}</div>`
     ).join("");
     const more = files.length > 300
-      ? `<div class="file-line muted">… و ${Number(files.length) - 300} مورد دیگر</div>` : "";
+      ? `<div class="file-line muted">… ${Number(files.length) - 300} ${t("preview.more")}</div>` : "";
     return `
       <div class="preview-group">
         <div class="preview-group-title"><span class="${dotClass}">●</span> ${title}
           <span class="count-badge">${Number(files.length) || 0}</span></div>
-        <div class="preview-files">${rows || '<div class="file-line muted">— هیچ</div>'}${more}</div>
+        <div class="preview-files">${rows || `<div class="file-line muted">${t("preview.none")}</div>`}${more}</div>
       </div>`;
   };
 
   const delCount = Number(res.deletedCount) || 0;
   panel.innerHTML = `
     <div class="card">
-      <div class="card-head"><span class="card-title">پیش‌نمایش تغییرات</span>
-        <span class="muted">هیچ فایلی هنوز تغییر نکرده است</span></div>
-      ${group("فایل‌های جدید", "new-dot", res.newFiles || [], true)}
-      ${group("فایل‌های تغییرکرده", "changed-dot", res.changedFiles || [], true)}
-      ${group("حذف‌شده در منبع", "deleted-dot", res.deletedFiles || [], mirror)}
-      <div class="preview-total">مجموع حجم قابل کپی: <b>${fmtBytes(res.totalBytes)}</b>
-        ${mirror && delCount ? ` — ${delCount} فایل به _Deleted منتقل خواهد شد` : ""}</div>
+      <div class="card-head"><span class="card-title">${t("preview.title")}</span>
+        <span class="muted">${t("preview.nothingChanged")}</span></div>
+      ${group(t("preview.new"), "new-dot", res.newFiles || [], true)}
+      ${group(t("preview.changed"), "changed-dot", res.changedFiles || [], true)}
+      ${group(t("preview.deleted"), "deleted-dot", res.deletedFiles || [], mirror)}
+      <div class="preview-total">${t("preview.total")} <b>${fmtBytes(res.totalBytes)}</b>
+        ${mirror && delCount ? ` — ${delCount} ${t("summary.moved")}` : ""}</div>
     </div>`;
 
   reveal(panel);
@@ -409,9 +414,6 @@ async function onPreview() {
   }
 }
 
-// ------------------------------------------------------------------
-// شروع بکاپ و رویدادهای زنده
-// ------------------------------------------------------------------
 function collapseAdvancedForRun() {
   const adv = $("advanced");
   if (adv) {
@@ -422,9 +424,7 @@ function collapseAdvancedForRun() {
 
 function restoreAdvancedAfterRun() {
   const adv = $("advanced");
-  if (adv) {
-    adv.open = Boolean(state.advancedWasOpen);
-  }
+  if (adv) adv.open = Boolean(state.advancedWasOpen);
 }
 
 async function onStart() {
@@ -436,14 +436,12 @@ async function onStart() {
     return;
   }
 
-  // تأیید بار اول حالت آینه (PLAN §5)
   if (profile.mode === "mirror_recycle" && !state.mirrorAcked) {
     showBanner("warn",
-      `حالت آینه: فایل‌هایی که از منبع حذف شوند از مقصد <b>حذف نمی‌شوند</b>، بلکه به ` +
-      `<span class="mono ltr">_Deleted\\&lt;تاریخ&gt;</span> منتقل می‌شوند. مطمئنی؟` +
+      t("banner.mirrorAck") +
       `<div class="banner-actions">
-         <button class="btn primary small" id="ack-yes">بله، ادامه بده</button>
-         <button class="btn ghost small" id="ack-no">نه، برگرد</button>
+         <button class="btn primary small" id="ack-yes">${t("banner.mirrorAckYes")}</button>
+         <button class="btn ghost small" id="ack-no">${t("banner.mirrorAckNo")}</button>
        </div>`);
     $("ack-yes").onclick = () => {
       state.mirrorAcked = true;
@@ -511,11 +509,10 @@ async function onStart() {
         const total = Number(d.total) || 0;
         const extras = Number(d.extras) || 0;
         showBanner("warn",
-          `هشدار حذف دسته‌جمعی (حالت آینه): منبع <b>${total}</b> فایل دارد، ولی <b>${extras}</b> فایل در مقصد هست ` +
-          `که در منبع پیدا نشدند. اگر منبع اشتباه یا خالی باشد، همه به <span class="mono ltr">_Deleted</span> منتقل می‌شوند. ادامه می‌دهی؟` +
+          t("banner.massDelete", { total, extras }) +
           `<div class="banner-actions">
-             <button class="btn danger small" id="mass-yes">بله، به _Deleted منتقل کن</button>
-             <button class="btn ghost small" id="mass-no">نه، لغو کن</button>
+             <button class="btn danger small" id="mass-yes">${t("banner.massDeleteYes")}</button>
+             <button class="btn ghost small" id="mass-no">${t("banner.massDeleteNo")}</button>
            </div>`);
         $("mass-yes").onclick = () => {
           state.allowMassDelete = true;
@@ -541,13 +538,13 @@ function showRunPanel() {
   panel.innerHTML = `
     <div class="card">
       <div class="card-head">
-        <span class="card-title">بکاپ در حال اجرا…</span>
-        <button id="btn-cancel" class="btn danger small">لغو</button>
+        <span class="card-title">${t("run.title")}</span>
+        <button id="btn-cancel" class="btn danger small">${t("run.cancel")}</button>
       </div>
       <div class="run-stats">
-        <span>فایل: <b id="stat-files">0</b>${state.totalFiles ? ` / ${Number(state.totalFiles)}` : ""}</span>
-        <span>حجم: <b id="stat-bytes">0 B</b></span>
-        <span>زمان: <b id="stat-elapsed">00:00</b></span>
+        <span>${t("run.files")} <b id="stat-files">0</b>${state.totalFiles ? ` / ${Number(state.totalFiles)}` : ""}</span>
+        <span>${t("run.bytes")} <b id="stat-bytes">0 B</b></span>
+        <span>${t("run.time")} <b id="stat-elapsed">00:00</b></span>
       </div>
       <div class="current-file ltr" id="current-file">—</div>
       <div class="log-box" id="log-box"></div>
@@ -556,8 +553,7 @@ function showRunPanel() {
 
   const box = $("log-box");
   box.addEventListener("scroll", () => {
-    const nearBottom =
-      box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+    const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
     state.autoscroll = nearBottom;
   });
 
@@ -570,15 +566,12 @@ function hideRunPanel() {
 }
 
 async function onCancel() {
-  // P0-4: حتی وقتی pendingRun است و runId هنوز برنگشته هم باید لغو کار کند
   if (!state.runId && !state.pendingRun) return;
   const btn = $("btn-cancel");
-  if (btn) { btn.disabled = true; btn.textContent = "در حال لغو…"; }
+  if (btn) { btn.disabled = true; btn.textContent = t("run.cancelling"); }
   try { await invoke("cancel_backup", { runId: state.runId || null }); } catch {}
 }
 
-// P1-8 + P0-3: درج دسته‌ای با DocumentFragment و سقف ۱۰۰۰ گره؛
-// هایلایت خطا فقط روی الگوی دقیق \bERROR\s+\d+\s+\(0x
 const MAX_LOG_NODES = 1000;
 const ERROR_LINE_RE = /\bERROR\s+\d+\s+\(0x/;
 
@@ -604,14 +597,10 @@ function appendLogBatch(lines) {
   if (state.autoscroll) box.scrollTop = box.scrollHeight;
 }
 
-// ------------------------------------------------------------------
-// کارت خلاصه نهایی
-// ------------------------------------------------------------------
 function renderSummary(s) {
   clearInterval(state.elapsedTimer);
   hideRunPanel();
-  // C5: پایان اجرا → نوار پیشرفت روی ۱۰۰٪ گام‌به‌گام (ولو این‌که خطوط لاگ
-  // زیر /MT:8 گم شده باشند، تعداد نهایی از جدول خلاصه می‌آید)
+  // C5: set the bar to 100% determinate from the summary
   const bar = $("progressbar");
   const fill = $("progress-fill");
   bar.classList.add("active");
@@ -627,10 +616,10 @@ function renderSummary(s) {
 
   const cls = safeResultClass(s.result);
   const badgeText = {
-    success: "موفق",
-    warnings: "کامل شد (با هشدار)",
-    failed: "شکست خورد",
-    cancelled: "لغو شد",
+    success: t("status.success"),
+    warnings: t("status.warnings"),
+    failed: t("status.failed"),
+    cancelled: t("status.cancelled"),
   }[cls];
 
   const copied = Number(s.copied) || 0;
@@ -643,20 +632,18 @@ function renderSummary(s) {
   panel.innerHTML = `
     <div class="card">
       <div class="summary-head">
-        <span class="card-title">نتیجه اجرا</span>
+        <span class="card-title">${t("summary.title")}</span>
         <span class="badge ${cls}">${badgeText}</span>
       </div>
       <div class="summary-grid">
-        <div class="summary-item"><div class="label">کپی‌شده</div><div class="value">${copied}</div></div>
-        <div class="summary-item"><div class="label">ردشده</div><div class="value">${skipped}</div></div>
-        <div class="summary-item"><div class="label">ناموفق</div><div class="value">${failed}</div></div>
-        ${moved ? `<div class="summary-item"><div class="label">به _Deleted منتقل شد</div><div class="value">${moved}</div></div>` : ""}
-        <div class="summary-item"><div class="label">حجم کپی</div><div class="value">${fmtBytes(s.bytes)}</div></div>
-        <div class="summary-item"><div class="label">مدت</div><div class="value">${fmtElapsed((Number(s.durationSecs) || 0) * 1000)}</div></div>
+        <div class="summary-item"><div class="label">${t("summary.copied")}</div><div class="value">${copied}</div></div>
+        <div class="summary-item"><div class="label">${t("summary.skipped")}</div><div class="value">${skipped}</div></div>
+        <div class="summary-item"><div class="label">${t("summary.failed")}</div><div class="value">${failed}</div></div>
+        ${moved ? `<div class="summary-item"><div class="label">${t("summary.moved")}</div><div class="value">${moved}</div></div>` : ""}
+        <div class="summary-item"><div class="label">${t("summary.bytes")}</div><div class="value">${fmtBytes(s.bytes)}</div></div>
+        <div class="summary-item"><div class="label">${t("summary.duration")}</div><div class="value">${fmtElapsed((Number(s.durationSecs) || 0) * 1000)}</div></div>
       </div>
-      ${cls === "cancelled"
-        ? `<div class="summary-note">لغو شد — ممکن است فایل‌های نیمه‌تمام در مقصد باقی مانده باشند؛ با اجرای مجدد بکاپ این فایل‌ها ترمیم می‌شوند.</div>`
-        : ""}
+      ${cls === "cancelled" ? `<div class="summary-note">${t("summary.cancelledNote")}</div>` : ""}
       ${cls === "failed" && Array.isArray(s.lastLines) && s.lastLines.length
         ? `<div class="summary-lastlines ltr">${esc(s.lastLines.join("\n"))}</div>` : ""}
     </div>`;
@@ -665,9 +652,6 @@ function renderSummary(s) {
   reveal(panel);
 }
 
-// ------------------------------------------------------------------
-// رویدادهای بک‌اند
-// ------------------------------------------------------------------
 function wireEvents() {
   listen("backup://log", (e) => {
     const { runId, lines, line } = e.payload || {};
@@ -692,8 +676,7 @@ function wireEvents() {
       if (fill) {
         fill.classList.remove("indeterminate");
         fill.classList.add("determinate");
-        const pct = Math.min(100, Math.round((filesDone / state.totalFiles) * 100));
-        fill.style.width = `${pct}%`;
+        fill.style.width = `${Math.min(100, Math.round((filesDone / state.totalFiles) * 100))}%`;
       }
     }
   });
@@ -707,9 +690,13 @@ function wireEvents() {
   });
 }
 
-// ------------------------------------------------------------------
-// تاریخچه
-// ------------------------------------------------------------------
+const RESULT_FA = () => ({
+  success: t("status.shortSuccess"),
+  warnings: t("status.shortWarnings"),
+  failed: t("status.shortFailed"),
+  cancelled: t("status.shortCancelled"),
+});
+
 async function loadHistory() {
   const list = $("history-list");
   list.innerHTML = "";
@@ -721,8 +708,9 @@ async function loadHistory() {
     $("history-empty").textContent = String(e);
     return;
   }
-  $("history-empty").textContent = "هنوز اجرایی ثبت نشده است.";
+  $("history-empty").textContent = t("history.empty");
   $("history-empty").hidden = runs.length > 0;
+  const labels = RESULT_FA();
   for (const r of runs) {
     const cls = safeResultClass(r.result);
     const copied = Number(r.copied) || 0;
@@ -731,9 +719,9 @@ async function loadHistory() {
     row.className = "history-row";
     row.innerHTML = `
       <span class="h-date">${esc(r.startedAt)}</span>
-      <span class="badge ${cls}">${RESULT_FA[cls] || "شکست"}</span>
+      <span class="badge ${cls}">${labels[cls] || "—"}</span>
       <span class="h-name">${esc(r.profileName)} <span class="muted">→ ${esc(r.destination)}</span></span>
-      <span class="h-counts">${copied} کپی · ${failed} ناموفق</span>
+      <span class="h-counts">${copied} ${t("history.copied")} · ${failed} ${t("history.failed")}</span>
       <span class="h-duration">${fmtElapsed((Number(r.durationSecs) || 0) * 1000)}</span>`;
     row.onclick = () => openRunLog(r.runId, r.startedAt);
     list.appendChild(row);
@@ -745,13 +733,12 @@ async function openRunLog(runId, date) {
     const log = await invoke("read_log", { runId });
     let moved = null;
     try { moved = await invoke("read_moved", { runId }); } catch {}
-    $("log-dialog-title").textContent = `لاگ اجرا — ${date}`;
+    $("log-dialog-title").textContent = `${t("log.title")} — ${date}`;
     $("log-dialog-body").textContent = moved
-      ? `${log}\n\n---- فایل‌های منتقل‌شده به _Deleted ----\n${moved}`
+      ? `${log}\n\n---- ${t("log.movedSection")} ----\n${moved}`
       : log;
     $("log-overlay").hidden = false;
   } catch (e) {
-    // P2: به‌جای alert() خطا را در بنر نشان بده
     switchView("backup");
     showBanner("error", esc(String(e)));
   }
@@ -766,9 +753,6 @@ function switchView(name) {
   });
 }
 
-// ------------------------------------------------------------------
-// ناوبری و اتصال رویدادهای UI
-// ------------------------------------------------------------------
 function wireUI() {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.onclick = () => {
@@ -784,7 +768,6 @@ function wireUI() {
   $("source").addEventListener("blur", () => checkPathInput("source", "source-status"));
   $("destination").addEventListener("blur", () => checkPathInput("destination", "dest-status"));
 
-  // P0-5: نگه داشتن رمز فقط در حافظه + پاک شدن با تغییر کاربر یا بستن برنامه
   $("network-password").addEventListener("input", () => {
     passwordMem = $("network-password").value || null;
   });
@@ -801,18 +784,21 @@ function wireUI() {
   window.addEventListener("pagehide", () => { passwordMem = null; });
 
   $("mode").onchange = () => {
-    $("mode-hint").textContent = MODE_HINTS[$("mode").value] || MODE_HINTS.safe;
+    $("mode-hint").textContent = modeHint($("mode").value);
   };
 
   $("schedule-enabled").addEventListener("change", updateScheduleUI);
   $("schedule-frequency").addEventListener("change", updateScheduleUI);
+
   $("auto-start").addEventListener("change", async () => {
     const el = $("auto-start");
     const enabled = el.checked;
     try {
-      const actual = await invoke("set_auto_start", { enabled });
-      el.checked = Boolean(actual);
-      showBanner("info", actual ? "راه‌اندازی خودکار فعال شد ✓" : "راه‌اندازی خودکار غیرفعال شد ✓");
+      const settings = await invoke("set_auto_start", { enabled });
+      el.checked = Boolean(settings.autoStart);
+      showBanner("info", settings.autoStart
+        ? (LANG === "fa" ? "راه‌اندازی خودکار فعال شد ✓" : "Launch on startup enabled ✓")
+        : (LANG === "fa" ? "راه‌اندازی خودکار غیرفعال شد ✓" : "Launch on startup disabled ✓"));
       setTimeout(clearBanner, 2500);
     } catch (e) {
       el.checked = !enabled;
@@ -820,9 +806,21 @@ function wireUI() {
     }
   });
 
+  $("btn-language").onclick = async () => {
+    const next = LANG === "fa" ? "en" : "fa";
+    try {
+      const settings = await invoke("set_language", { language: next });
+      LANG = settings.language === "fa" ? "fa" : "en";
+      applyAll();
+      showBanner("info", LANG === "fa" ? "زبان به فارسی تغییر کرد ✓" : "Language switched to English ✓");
+      setTimeout(clearBanner, 2500);
+    } catch (e) {
+      showBanner("error", esc(String(e)));
+    }
+  };
+
   $("btn-preview").onclick = onPreview;
   $("btn-start").onclick = onStart;
-
   $("btn-new-profile").onclick = newProfileForm;
 
   $("btn-save-profile").onclick = async () => {
@@ -836,7 +834,7 @@ function wireUI() {
       await invoke("save_profile", { profile });
       state.profileId = profile.id;
       await reloadProfiles(profile.id);
-      showBanner("info", "پروفایل ذخیره شد ✓");
+      showBanner("info", t("banner.saved"));
       setTimeout(clearBanner, 2500);
     } catch (e) {
       showBanner("error", esc(String(e)));
@@ -862,17 +860,25 @@ function browseFor(inputId) {
   };
 }
 
-// ------------------------------------------------------------------
-// شروع
-// ------------------------------------------------------------------
 async function init() {
   wireUI();
   wireEvents();
+
   try {
-    $("auto-start").checked = Boolean(await invoke("get_auto_start"));
+    const settings = await invoke("get_settings");
+    LANG = settings.language === "fa" ? "fa" : "en";
   } catch {
-    $("auto-start").checked = false;
+    LANG = "en";
   }
+  $("btn-language").textContent = t("language.switch");
+  $("auto-start").checked = false;
+  applyAll();
+
+  try {
+    const settingsAgain = await invoke("get_settings");
+    $("auto-start").checked = Boolean(settingsAgain.autoStart);
+  } catch {}
+
   try {
     const profiles = await invoke("load_profiles");
     state.profiles = profiles.slice(0, 3);
@@ -883,8 +889,9 @@ async function init() {
     }
   } catch (e) {
     newProfileForm();
-    showBanner("error", "خواندن پروفایل‌ها شکست خورد: " + esc(String(e)));
+    showBanner("error", `${t("error.saveProfile")}: ${esc(String(e))}`);
   }
 }
 
 init();
+

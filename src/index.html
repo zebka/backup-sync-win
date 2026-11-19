@@ -1,174 +1,172 @@
 <!doctype html>
-<html dir="rtl" lang="fa">
+<html dir="ltr" lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>بکاپ‌گیر شبکه</title>
+  <title>BackupSync — Windows Network Backup</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
-    <!-- ===== نوار کنار ===== -->
+    <!-- ===== Sidebar ===== -->
     <aside id="sidebar">
       <div class="brand">
         <div class="brand-mark"></div>
-        <span>بکاپ‌گیر</span>
+        <span data-i18n="app.name">BackupSync</span>
+      </div>
+      <div class="sidebar-tools">
+        <button id="btn-language" class="btn ghost small" data-i18n="language.switch">فارسی</button>
       </div>
       <nav>
         <button class="nav-item active" data-view="backup">
-          <span class="nav-icon">⟳</span> بکاپ
+          <span class="nav-icon">⟳</span> <span data-i18n="nav.backup">Backup</span>
         </button>
         <button class="nav-item" data-view="history">
-          <span class="nav-icon">☰</span> تاریخچه
+          <span class="nav-icon">☰</span> <span data-i18n="nav.history">History</span>
         </button>
       </nav>
       <div class="profiles-panel">
         <div class="profiles-panel-head">
-          <span>پروفایل‌ها</span>
-          <button id="btn-new-profile" class="btn ghost small">جدید</button>
+          <span data-i18n="profiles.title">Profiles</span>
+          <button id="btn-new-profile" class="btn ghost small" data-i18n="profiles.new">New</button>
         </div>
         <div id="profile-list" class="profile-list"></div>
-        <div id="profiles-empty" class="profiles-empty">هنوز پروفایلی ذخیره نشده است.</div>
+        <div id="profiles-empty" class="profiles-empty" data-i18n="profiles.empty">No saved profiles yet.</div>
       </div>
-      <div class="sidebar-footer">Backup Sync v1.0</div>
+      <div class="sidebar-footer">BackupSync v2.0</div>
     </aside>
 
-    <!-- ===== ناحیه اصلی ===== -->
+    <!-- ===== Main area ===== -->
     <main id="main">
 
-      <!-- ---------- نمای بکاپ ---------- -->
+      <!-- ---------- Backup view ---------- -->
       <section id="view-backup" class="view active">
-        <h1 class="view-title">بکاپ</h1>
+        <h1 class="view-title" data-i18n="nav.backup">Backup</h1>
 
-        <!-- کارت پروفایل -->
+        <!-- Profile card -->
         <div class="card">
           <div class="card-head">
-            <span class="card-title">پروفایل بکاپ</span>
-            <button id="btn-save-profile" class="btn ghost small">ذخیره پروفایل</button>
+            <span class="card-title" data-i18n="profile.cardTitle">Backup profile</span>
+            <button id="btn-save-profile" class="btn ghost small" data-i18n="profile.save">Save profile</button>
           </div>
 
           <div class="field">
-            <label for="profile-name">نام پروفایل</label>
-            <input id="profile-name" type="text" value="پیش‌فرض" />
+            <label for="profile-name" data-i18n="profile.name">Profile name</label>
+            <input id="profile-name" type="text" value="Default" data-i18n-value="profile.defaultName" />
           </div>
 
           <div class="field">
-            <label for="source">مسیر منبع <span class="muted">(شبکه یا محلی)</span></label>
+            <label for="source"><span data-i18n="profile.sourceLabel">Source path</span> <span class="muted" data-i18n="profile.sourceHint">(network or local)</span></label>
             <div class="path-row">
               <input id="source" class="mono ltr" placeholder="\\PC-NAME\Share\Docs" spellcheck="false" />
-              <button id="browse-source" class="btn ghost small">مرور…</button>
+              <button id="browse-source" class="btn ghost small" data-i18n="path.browse">Browse…</button>
             </div>
             <div class="hint" id="source-status"></div>
           </div>
 
           <div class="field">
-            <label for="destination">مسیر مقصد <span class="muted">(پوشه لوکال)</span></label>
+            <label for="destination"><span data-i18n="profile.destinationLabel">Destination path</span> <span class="muted" data-i18n="profile.destinationHint">(local folder)</span></label>
             <div class="path-row">
               <input id="destination" class="mono ltr" placeholder="D:\Backups\Share" spellcheck="false" />
-              <button id="browse-dest" class="btn ghost small">مرور…</button>
+              <button id="browse-dest" class="btn ghost small" data-i18n="path.browse">Browse…</button>
             </div>
             <div class="hint" id="dest-status"></div>
           </div>
 
           <div class="field">
-            <label for="mode">حالت بکاپ</label>
+            <label for="mode" data-i18n="mode.label">Backup mode</label>
             <select id="mode">
-              <option value="safe">امن — فقط کپی جدید/تغییرکرده</option>
-              <option value="mirror_recycle">آینه با سطل بازیافت — حذفی‌ها به _Deleted</option>
+              <option value="safe" data-i18n="mode.safe">Safe — copy only new/changed files</option>
+              <option value="mirror_recycle" data-i18n="mode.mirror">Mirror with recycle — deleted items move to _Deleted</option>
             </select>
-            <div class="hint" id="mode-hint">
-              فقط فایل‌های جدید یا تغییرکرده کپی می‌شوند. هیچ‌چیز حذف نمی‌شود.
-            </div>
+            <div class="hint" id="mode-hint" data-i18n="mode.safeHint">Only new or changed files are copied. Nothing is deleted.</div>
           </div>
 
           <div class="schedule-section">
-            <div class="schedule-title">بررسی و بکاپ خودکار</div>
+            <div class="schedule-title" data-i18n="schedule.title">Automatic check & backup</div>
             <div class="field inline check-row">
               <label class="check-label" for="auto-start">
                 <input id="auto-start" type="checkbox" />
-                راه‌اندازی برنامه با ویندوز
+                <span data-i18n="autostart.label">Launch BackupSync with Windows</span>
               </label>
             </div>
             <div class="field inline check-row">
               <label class="check-label" for="schedule-enabled">
                 <input id="schedule-enabled" type="checkbox" />
-                اجرای خودکار این پروفایل
+                <span data-i18n="schedule.enable">Run this profile automatically</span>
               </label>
             </div>
             <div class="schedule-body" id="schedule-body" hidden>
               <div class="field inline">
-                <label for="schedule-action">نوع اجرا</label>
+                <label for="schedule-action" data-i18n="schedule.action">Task</label>
                 <select id="schedule-action">
-                  <option value="backup">بکاپ واقعی</option>
-                  <option value="check">فقط بررسی تغییرات</option>
+                  <option value="backup" data-i18n="schedule.backup">Real backup</option>
+                  <option value="check" data-i18n="schedule.check">Check only</option>
                 </select>
               </div>
               <div class="field inline">
-                <label for="schedule-frequency">تکرار</label>
+                <label for="schedule-frequency" data-i18n="schedule.frequency">Repeat</label>
                 <select id="schedule-frequency">
-                  <option value="daily">هر روز</option>
-                  <option value="weekly">هر هفته</option>
+                  <option value="daily" data-i18n="schedule.daily">Daily</option>
+                  <option value="weekly" data-i18n="schedule.weekly">Weekly</option>
                 </select>
               </div>
               <div class="field inline">
-                <label for="schedule-time">ساعت اجرا</label>
+                <label for="schedule-time" data-i18n="schedule.time">Run time</label>
                 <input id="schedule-time" type="time" value="21:30" />
               </div>
               <div class="field inline" id="weekday-row" hidden>
-                <label for="schedule-weekday">روز هفته</label>
+                <label for="schedule-weekday" data-i18n="schedule.weekday">Day of week</label>
                 <select id="schedule-weekday">
-                  <option value="0">شنبه</option>
-                  <option value="1">یکشنبه</option>
-                  <option value="2">دوشنبه</option>
-                  <option value="3">سه‌شنبه</option>
-                  <option value="4">چهارشنبه</option>
-                  <option value="5">پنجشنبه</option>
-                  <option value="6">جمعه</option>
+                  <option value="0" data-i18n="weekday.sat">Saturday</option>
+                  <option value="1" data-i18n="weekday.sun">Sunday</option>
+                  <option value="2" data-i18n="weekday.mon">Monday</option>
+                  <option value="3" data-i18n="weekday.tue">Tuesday</option>
+                  <option value="4" data-i18n="weekday.wed">Wednesday</option>
+                  <option value="5" data-i18n="weekday.thu">Thursday</option>
+                  <option value="6" data-i18n="weekday.fri">Friday</option>
                 </select>
               </div>
-              <div class="hint">در اجرای خودکار رمز شبکه وارد نمی‌شود؛ اگر اشتراک رمز لازم داشته باشد اجرا با پیام خطا متوقف می‌شود. در حالت آینه هم حذف دسته‌جمعی به‌صورت قطعی رد می‌شود.</div>
+              <div class="hint" data-i18n="schedule.hint">Scheduled runs do not use a network password; if the share needs auth but no session is open, the run fails and is logged. Mirror mass-delete stays refused.</div>
             </div>
           </div>
 
           <details id="advanced">
-            <summary>تنظیمات پیشرفته</summary>
+            <summary data-i18n="advanced.title">Advanced settings</summary>
             <div class="advanced-body">
               <div class="field inline">
-                <label for="threads">رشته‌های موازی کپی</label>
+                <label for="threads" data-i18n="advanced.threads">Parallel copy threads</label>
                 <input id="threads" type="number" min="1" max="128" value="8" />
-                <span class="muted">۸ پیش‌فرض؛ روی شبکه‌های کند کمتر بگذار</span>
+                <span class="muted" data-i18n="advanced.threadsHint">8 is default; lower it for slow networks</span>
               </div>
               <div class="field">
-                <label for="excludes">الگوهای حذف‌شده (هر خط یکی)</label>
+                <label for="excludes" data-i18n="advanced.excludes">Excluded patterns (one per line)</label>
                 <textarea id="excludes" class="mono ltr" rows="4">Thumbs.db
 ~$*
 *.tmp
 desktop.ini</textarea>
               </div>
               <div class="field">
-                <label for="network-user">ورود به شبکه <span class="muted">(اختیاری — اگر اشتراک رمز می‌خواهد)</span></label>
-                <input id="network-user" type="text" class="ltr" placeholder="DOMAIN\user یا user" spellcheck="false" />
-                <input id="network-password" type="password" class="ltr" placeholder="رمز فقط در حافظه می‌ماند تا برنامه بسته شود" spellcheck="false" autocomplete="off" />
+                <label for="network-user"><span data-i18n="advanced.networkUser">Network login</span> <span class="muted" data-i18n="advanced.networkUserHint">(optional — for password-protected shares)</span></label>
+                <input id="network-user" type="text" class="ltr" placeholder="DOMAIN\user or user" data-i18n-placeholder="advanced.networkUserPlaceholder" spellcheck="false" />
+                <input id="network-password" type="password" class="ltr" placeholder="Password stays in memory until the app closes" data-i18n-placeholder="advanced.networkPasswordPlaceholder" spellcheck="false" autocomplete="off" />
               </div>
             </div>
           </details>
         </div>
 
-        <!-- banner بالای ردیف دکمه‌ها تا نتیجه همیشه دیده شود (P0-8) -->
         <div id="banner"></div>
 
-        <!-- ردیف دکمه‌ها -->
         <div class="action-row">
           <button id="btn-preview" class="btn secondary">
-            <span class="btn-label">بررسی تغییرات</span>
+            <span class="btn-label" data-i18n="actions.preview">Check changes</span>
           </button>
           <button id="btn-start" class="btn primary">
-            <span class="btn-label">شروع بکاپ</span>
+            <span class="btn-label" data-i18n="actions.start">Start backup</span>
           </button>
         </div>
         <div class="progressbar" id="progressbar"><div class="fill indeterminate" id="progress-fill"></div></div>
 
-        <!-- ناحیه نتیجه: پیش‌نمایش / اجرای زنده / خلاصه -->
         <div id="results">
           <div id="preview-panel" hidden></div>
           <div id="run-panel" hidden></div>
@@ -176,21 +174,21 @@ desktop.ini</textarea>
         </div>
       </section>
 
-      <!-- ---------- نمای تاریخچه ---------- -->
+      <!-- ---------- History view ---------- -->
       <section id="view-history" class="view">
-        <h1 class="view-title">تاریخچه اجراها</h1>
+        <h1 class="view-title" data-i18n="history.title">Run history</h1>
         <div id="history-list" class="history-list"></div>
-        <div id="history-empty" class="empty-note" hidden>هنوز اجرایی ثبت نشده است.</div>
+        <div id="history-empty" class="empty-note" hidden data-i18n="history.empty">No runs recorded yet.</div>
       </section>
     </main>
   </div>
 
-  <!-- پوشش نمایش لاگ -->
+  <!-- Log viewer dialog -->
   <div id="log-overlay" hidden>
     <div class="log-dialog">
       <div class="log-dialog-head">
-        <span id="log-dialog-title">لاگ اجرا</span>
-        <button id="btn-close-log" class="btn ghost small">بستن</button>
+        <span id="log-dialog-title" data-i18n="log.title">Run log</span>
+        <button id="btn-close-log" class="btn ghost small" data-i18n="log.close">Close</button>
       </div>
       <pre id="log-dialog-body" class="mono ltr"></pre>
     </div>

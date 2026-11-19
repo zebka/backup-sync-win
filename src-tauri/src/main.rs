@@ -42,36 +42,58 @@ impl AppState {
 
 fn validate_profile(profile: &Profile) -> Result<(), String> {
     if profile.source.trim().is_empty() || profile.destination.trim().is_empty() {
-        return Err("مسیر منبع و مقصد نمی‌تواند خالی باشد.".to_string());
+        return Err(settings::tr(
+            "مسیر منبع و مقصد نمی‌تواند خالی باشد.",
+            "Source and destination cannot be empty.",
+        ));
     }
     if normalize_path(&profile.source).to_lowercase()
         == normalize_path(&profile.destination).to_lowercase()
     {
-        return Err("مسیر منبع و مقصد نمی‌توانند یکسان باشند.".to_string());
+        return Err(settings::tr(
+            "مسیر منبع و مقصد نمی‌توانند یکسان باشند.",
+            "Source and destination cannot be the same.",
+        ));
     }
     for p in &profile.excludes {
         let t = p.trim();
         if t.is_empty() {
-            return Err("الگوی حذف نمی‌تواند خالی باشد.".to_string());
+            return Err(settings::tr(
+                "الگوی حذف نمی‌تواند خالی باشد.",
+                "An exclude pattern cannot be empty.",
+            ));
         }
         if t.starts_with('/') {
-            return Err(format!(
-                "الگوی حذف با «/» شروع می‌شود و به‌عنوان سوییچ robocopy خوانده می‌شود: {t}"
+            return Err(settings::tr(
+                &format!("الگوی حذف با «/» شروع می‌شود و به‌عنوان سوییچ robocopy خوانده می‌شود: {t}"),
+                &format!("An exclude pattern starting with «/» would be read as a robocopy switch: {t}"),
             ));
         }
     }
     if profile.schedule_enabled {
         if profile.schedule_frequency != "daily" && profile.schedule_frequency != "weekly" {
-            return Err("تکرار زمان‌بندی نامعتبر است.".to_string());
+            return Err(settings::tr(
+                "تکرار زمان‌بندی نامعتبر است.",
+                "Invalid schedule frequency.",
+            ));
         }
         if profile.schedule_action != "backup" && profile.schedule_action != "check" {
-            return Err("نوع کار زمان‌بندی نامعتبر است.".to_string());
+            return Err(settings::tr(
+                "نوع کار زمان‌بندی نامعتبر است.",
+                "Invalid scheduled task type.",
+            ));
         }
         if parse_hhmm(&profile.schedule_time).is_none() {
-            return Err("ساعت زمان‌بندی نامعتبر است (HH:MM).".to_string());
+            return Err(settings::tr(
+                "ساعت زمان‌بندی نامعتبر است (HH:MM).",
+                "Invalid schedule time (HH:MM).",
+            ));
         }
         if profile.schedule_frequency == "weekly" && profile.schedule_weekday > 6 {
-            return Err("روز هفته زمان‌بندی نامعتبر است.".to_string());
+            return Err(settings::tr(
+                "روز هفته زمان‌بندی نامعتبر است.",
+                "Invalid schedule weekday.",
+            ));
         }
     }
     Ok(())
@@ -156,10 +178,10 @@ async fn run_scheduled_task(app: AppHandle, profile: Profile) {
                 let _ = app
                     .notification()
                     .builder()
-                    .title("بررسی زمان‌بندی کامل شد")
-                    .body(format!(
-                        "{} فایل جدید و {} فایل تغییرکرده یافت شد.",
-                        p.new_count, p.changed_count
+                    .title(settings::tr("بررسی زمان‌بندی کامل شد", "Scheduled check complete"))
+                    .body(settings::tr(
+                        &format!("{} فایل جدید و {} فایل تغییرکرده یافت شد.", p.new_count, p.changed_count),
+                        &format!("{} new and {} changed files found.", p.new_count, p.changed_count),
                     ))
                     .show();
             }
@@ -167,7 +189,7 @@ async fn run_scheduled_task(app: AppHandle, profile: Profile) {
                 let _ = app
                     .notification()
                     .builder()
-                    .title("بررسی زمان‌بندی ناموفق بود")
+                    .title(settings::tr("بررسی زمان‌بندی ناموفق بود", "Scheduled check failed"))
                     .body(e)
                     .show();
             }
@@ -191,7 +213,7 @@ async fn run_scheduled_task(app: AppHandle, profile: Profile) {
             let _ = app
                 .notification()
                 .builder()
-                .title("اجرای زمان‌بندی‌شده انجام نشد")
+                .title(settings::tr("اجرای زمان‌بندی‌شده انجام نشد", "Scheduled run failed"))
                 .body(e)
                 .show();
         }
@@ -203,21 +225,30 @@ async fn run_scheduled_task(app: AppHandle, profile: Profile) {
 // ------------------------------------------------------------------
 
 #[tauri::command]
-fn get_auto_start() -> Result<bool, String> {
-    Ok(settings::is_auto_start_enabled())
+fn get_settings() -> Result<settings::Settings, String> {
+    let mut settings = settings::load();
+    settings.auto_start = settings::is_auto_start_enabled();
+    Ok(settings)
 }
 
 #[tauri::command]
-fn set_auto_start(enabled: bool) -> Result<bool, String> {
-    settings::set_auto_start(enabled)?;
-    Ok(settings::is_auto_start_enabled())
+fn set_auto_start(enabled: bool) -> Result<settings::Settings, String> {
+    settings::set_auto_start(enabled)
+}
+
+#[tauri::command]
+fn set_language(language: String) -> Result<settings::Settings, String> {
+    settings::set_language(&language)
 }
 
 #[tauri::command]
 fn delete_profile(state: State<'_, AppState>, profile_id: String) -> Result<Vec<Profile>, String> {
     let id = profile_id.trim();
     if id.is_empty() {
-        return Err("شناسه پروفایل نامعتبر است.".to_string());
+        return Err(settings::tr(
+            "شناسه پروفایل نامعتبر است.",
+            "Invalid profile ID.",
+        ));
     }
     profiles::remove(&state.root, id)?;
     profiles::load(&state.root)
@@ -275,7 +306,10 @@ async fn cancel_backup(state: State<'_, AppState>, run_id: Option<String>) -> Re
         Some(h) => {
             if let Some(rid) = run_id {
                 if h.id != rid {
-                    return Err("این شناسه با بکاپ فعال یکی نیست.".to_string());
+                    return Err(settings::tr(
+                        "این شناسه با بکاپ فعال یکی نیست.",
+                        "This ID does not match the active backup.",
+                    ));
                 }
             }
             h.cancelled.store(true, Ordering::SeqCst);
@@ -284,7 +318,10 @@ async fn cancel_backup(state: State<'_, AppState>, run_id: Option<String>) -> Re
             }
             Ok(())
         }
-        None => Err("بکاپ فعالی وجود ندارد.".to_string()),
+        None => Err(settings::tr(
+            "بکاپ فعالی وجود ندارد.",
+            "There is no active backup.",
+        )),
     }
 }
 
@@ -304,11 +341,14 @@ fn valid_run_id(run_id: &str) -> bool {
 #[tauri::command]
 async fn read_log(state: State<'_, AppState>, run_id: String) -> Result<String, String> {
     if !valid_run_id(&run_id) {
-        return Err("شناسه اجرا نامعتبر است.".to_string());
+        return Err(settings::tr("شناسه اجرا نامعتبر است.", "Invalid run ID."));
     }
     let path = state.logs_dir.join(format!("{run_id}.log"));
     if !path.exists() {
-        return Err("فایل لاگ این اجرا پیدا نشد.".to_string());
+        return Err(settings::tr(
+            "فایل لاگ این اجرا پیدا نشد.",
+            "Log file for this run was not found.",
+        ));
     }
     robocopy::read_log_file(&path)
 }
@@ -317,7 +357,7 @@ async fn read_log(state: State<'_, AppState>, run_id: String) -> Result<String, 
 #[tauri::command]
 async fn read_moved(state: State<'_, AppState>, run_id: String) -> Result<Option<String>, String> {
     if !valid_run_id(&run_id) {
-        return Err("شناسه اجرا نامعتبر است.".to_string());
+        return Err(settings::tr("شناسه اجرا نامعتبر است.", "Invalid run ID."));
     }
     let path = state.logs_dir.join(format!("{run_id}.moved.txt"));
     if !path.exists() {
@@ -325,7 +365,10 @@ async fn read_moved(state: State<'_, AppState>, run_id: String) -> Result<Option
     }
     fs::read_to_string(&path)
         .map(Some)
-        .map_err(|e| format!("خواندن فایل منتقل‌شده‌ها ممکن نشد: {e}"))
+        .map_err(|e| settings::tr(
+            &format!("خواندن فایل منتقل‌شده‌ها ممکن نشد: {e}"),
+            &format!("Failed to read moved-files file: {e}"),
+        ))
 }
 
 #[tauri::command]
@@ -366,14 +409,14 @@ fn confirm_exit_during_run(app: AppHandle) {
         let window = app.get_webview_window("main");
         let mut builder = app
             .dialog()
-            .message(
-                "یک بکاپ یا پیش‌نمایش در حال اجراست.\nبا خروج، اجرای فعلی لغو می‌شود \
-                 (نتیجه در تاریخچه ثبت می‌شود). خارج می‌شوی؟",
-            )
-            .title("خروج در حین اجرا")
+            .message(settings::tr(
+                "یک بکاپ یا پیش‌نمایش در حال اجراست.\nبا خروج، اجرای فعلی لغو می‌شود (نتیجه در تاریخچه ثبت می‌شود). خارج می‌شوی؟",
+                "A backup or preview is running.\nExiting will cancel it (the result will be written to history). Exit?",
+            ))
+            .title(settings::tr("خروج در حین اجرا", "Exit while running"))
             .buttons(MessageDialogButtons::OkCancelCustom(
-                "خروج و لغو".to_string(),
-                "ماندن".to_string(),
+                settings::tr("خروج و لغو", "Exit and cancel"),
+                settings::tr("ماندن", "Stay"),
             ));
         // دیالوگ باید جلوی پنجره اصلی باز شود نه پشت آن
         builder = match window.as_ref() {
@@ -430,8 +473,9 @@ fn main() {
             read_log,
             read_moved,
             check_path,
-            get_auto_start,
+            get_settings,
             set_auto_start,
+            set_language,
             delete_profile,
         ])
         .setup(|app| {
@@ -442,7 +486,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("خطا در ساخت برنامه tauri")
+        .expect("error building tauri app")
         .run(|app, event| match event {
             // P1-11: CloseRequested — اگر چیزی در حال اجراست، اول سؤال کن
             RunEvent::WindowEvent {

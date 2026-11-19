@@ -1,10 +1,16 @@
 # BackupSync — Windows Incremental Backup for Network Shares
 
-**BackupSync** is a lightweight, open-source **Windows backup application** for backing up **network shares**, **local folders**, and **offline drives** with an intuitive **Persian RTL dark UI** and a fast native **Tauri + Rust** backend. It wraps **Microsoft Robocopy** with a safer, user-friendly experience: incremental copies, change preview, mirror mode with `_Deleted`, scheduled backups, and Windows startup support.
+**Version 2.0 — bilingual UI (فارسی / English).** BackupSync is a lightweight, open-source **Windows backup application** for backing up **network shares**, **local folders**, and **offline drives** with an intuitive **RTL-capable UI** (Persian right-to-left and English left-to-right) and a fast native **Tauri + Rust** backend. It wraps **Microsoft Robocopy** with a safer, user-friendly experience: incremental copies, change preview, mirror mode with `_Deleted`, scheduled backups, and Windows startup support.
 
 > اگر به‌دنبال یک **بکاپ ویندوز** یا **نرم‌افزار بکاپ شبکه** برای اشتراک‌های SMB هستید، BackupSync گزینه‌ای سبک، قابل‌ممیزی و متن‌باز است.
 
 [فارسی](README.fa.md) · English · Keywords: Windows backup software, network share backup, incremental backup, Robocopy GUI, Tauri backup app, Persian backup tool, مروری‌بر Robocopy، بکاپ اختصاصی ویندوز، بکاپ اشتراک شبکه
+
+## Languages / زبان‌ها
+
+- UI languages: **فارسی (RTL)** and **English (LTR)**.
+- Switch the interface from the sidebar with the **فارسی / English** button.
+- User-facing errors and notifications are also emitted in the chosen language.
 
 ## Highlights
 

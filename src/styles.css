@@ -263,6 +263,17 @@ input[type="checkbox"] {
   padding: 8px 10px;
 }
 
+.sidebar-tools {
+  padding: 0 8px 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.sidebar-tools .btn {
+  width: 100%;
+  justify-content: center;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 8px;
