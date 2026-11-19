@@ -123,7 +123,7 @@ src-tauri/      # Rust backend (Tauri v2), Robocopy orchestration
 
 ## License
 
-License terms are defined by the project owner; see repository metadata or contact the maintainer. No license file is bundled yet.
+BackupSync is released under the **MIT License**. See [`LICENSE`](LICENSE).
 
 ## FAQ
 
