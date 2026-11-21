@@ -16,6 +16,8 @@
       </div>
       <div class="sidebar-tools">
         <button id="btn-language" class="btn ghost small" data-i18n="language.switch">فارسی</button>
+        <button id="btn-security" class="btn ghost small" data-i18n="security.button">رمز ورود</button>
+        <button id="btn-lock" class="btn ghost small" data-i18n="security.lockNow" hidden>قفل کردن همین حالا</button>
       </div>
       <nav>
         <button class="nav-item active" data-view="backup">
@@ -34,7 +36,7 @@
         <div id="profiles-empty" class="profiles-empty" data-i18n="profiles.empty">No saved profiles yet.</div>
       </div>
       <div class="sidebar-meta">
-        <div class="sidebar-footer">BackupSync v2.1</div>
+        <div class="sidebar-footer">BackupSync v3.0</div>
         <a id="btn-github" class="sidebar-repo" href="https://github.com/zebka/backup-sync-win" target="_blank" rel="noreferrer noopener" aria-label="GitHub repository">
           <svg class="github-logo" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.111.82-.261.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
@@ -104,6 +106,13 @@
                 <span data-i18n="schedule.enable">Run this profile automatically</span>
               </label>
             </div>
+            <div class="field inline check-row">
+              <label class="check-label" for="run-on-startup">
+                <input id="run-on-startup" type="checkbox" />
+                <span data-i18n="schedule.onStartup">Backup on every Windows startup</span>
+              </label>
+            </div>
+            <div class="hint" id="startup-hint" data-i18n="schedule.onStartupHint"></div>
             <div class="schedule-body" id="schedule-body" hidden>
               <div class="field inline">
                 <label for="schedule-action" data-i18n="schedule.action">Task</label>
@@ -199,6 +208,68 @@ desktop.ini</textarea>
         <button id="btn-close-log" class="btn ghost small" data-i18n="log.close">Close</button>
       </div>
       <pre id="log-dialog-body" class="mono ltr"></pre>
+    </div>
+  </div>
+
+  <!-- قفل ورود به برنامه -->
+  <div id="lock-overlay" hidden>
+    <div class="lock-dialog">
+      <div class="lock-brand">
+        <div class="brand-mark"></div>
+        <span data-i18n="app.name">BackupSync</span>
+      </div>
+      <h2 class="lock-title" data-i18n="security.lockTitle">ورود به BackupSync</h2>
+      <p class="muted" data-i18n="security.lockHint">برای ادامه رمز ورود برنامه را وارد کنید.</p>
+      <input id="lock-password" type="password" class="lock-input ltr" data-i18n-placeholder="security.passwordPlaceholder" autocomplete="current-password" spellcheck="false" />
+      <div id="lock-error" class="lock-error"></div>
+      <div class="lock-actions">
+        <button id="btn-unlock" class="btn primary" data-i18n="security.unlock">ورود</button>
+        <button id="btn-forgot" class="btn ghost small" data-i18n="security.forgot">رمز را فراموش کردم</button>
+      </div>
+      <div id="recovery-box" class="recovery-box" hidden>
+        <p class="muted" data-i18n="security.recoveryHint2">کد بازیابی ۱۶ رقمی که هنگام تنظیم رمز دریافت کردید را وارد کنید.</p>
+        <input id="recovery-code" type="text" class="lock-input ltr" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" />
+        <button id="btn-unlock-code" class="btn secondary small" data-i18n="security.unlockWithCode">ورود با کد بازیابی</button>
+      </div>
+      <button id="btn-lock-language" class="btn ghost small lock-lang" data-i18n="language.switch">English</button>
+    </div>
+  </div>
+
+  <!-- تنظیمات رمز ورود -->
+  <div id="security-overlay" hidden>
+    <div class="security-dialog">
+      <div class="log-dialog-head">
+        <span data-i18n="security.title">رمز ورود برنامه</span>
+        <button id="btn-close-security" class="btn ghost small" data-i18n="log.close">بستن</button>
+      </div>
+      <div class="security-body">
+        <div id="security-status" class="security-status muted"></div>
+        <div class="field">
+          <label for="security-current" data-i18n="security.current">رمز فعلی</label>
+          <input id="security-current" type="password" class="ltr" autocomplete="current-password" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="security-new" data-i18n="security.new">رمز جدید</label>
+          <input id="security-new" type="password" class="ltr" autocomplete="new-password" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="security-confirm" data-i18n="security.confirm">تکرار رمز جدید</label>
+          <input id="security-confirm" type="password" class="ltr" autocomplete="new-password" spellcheck="false" />
+        </div>
+        <div id="security-error" class="lock-error"></div>
+        <div class="security-actions">
+          <button id="btn-set-password" class="btn primary" data-i18n="security.set">تنظیم رمز</button>
+          <button id="btn-remove-password" class="btn danger" data-i18n="security.remove">حذف رمز</button>
+        </div>
+        <div id="recovery-result" class="recovery-result" hidden>
+          <div class="recovery-title" data-i18n="security.recoveryTitle">کد بازیابی (فقط یکبار)</div>
+          <p class="muted" data-i18n="security.recoveryHint">این کد را حتماً یادداشت کنید؛ بعد از بستن این پنجره دوباره نمایش داده نخواهد شد.</p>
+          <div class="recovery-row">
+            <code id="recovery-code-text" class="recovery-code ltr"></code>
+            <button id="btn-copy-recovery" class="btn ghost small" data-i18n="security.copy">کپی</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

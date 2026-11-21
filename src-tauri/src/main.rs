@@ -3,15 +3,17 @@
 mod history;
 mod profiles;
 mod robocopy;
+mod security;
 mod settings;
 
 use chrono::{Datelike, Timelike};
 use profiles::Profile;
 use robocopy::{normalize_path, CheckPathResult, PreviewResult, RunHandle};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 #[cfg(windows)]
@@ -21,6 +23,8 @@ pub struct AppState {
     pub root: PathBuf,
     pub logs_dir: PathBuf,
     pub running: Arc<Mutex<Option<RunHandle>>>,
+    /// آیا کاربر در این جلسه رمز ورود را درست وارد کرده است؟
+    pub unlocked: AtomicBool,
 }
 
 impl AppState {
@@ -30,12 +34,32 @@ impl AppState {
             .join("BackupSync");
         let logs_dir = root.join("logs");
         let _ = fs::create_dir_all(&logs_dir);
+        let password_enabled = settings::load().password_hash.is_some();
         AppState {
             root,
             logs_dir,
             running: Arc::new(Mutex::new(None)),
+            unlocked: AtomicBool::new(!password_enabled),
         }
     }
+}
+
+/// تمام دستورات حاوی داده تا زمانی که قفل باز نشود متوقف میشوند.
+fn ensure_unlocked(state: &AppState) -> Result<(), String> {
+    if settings::load().password_hash.is_some() && !state.unlocked.load(Ordering::SeqCst) {
+        return Err(settings::tr(
+            "ابتدا رمز ورود برنامه را وارد کنید.",
+            "Enter the app password first.",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PasswordSetupResult {
+    recovery_code: String,
+    settings: settings::ClientSettings,
 }
 
 // ------------------------------------------------------------------
@@ -223,6 +247,69 @@ async fn run_scheduled_task(app: AppHandle, profile: Profile) {
 }
 
 // ------------------------------------------------------------------
+// بکاپ هنگام روشن شدن ویندوز (پروفایل های دارای runOnStartup)
+// ------------------------------------------------------------------
+
+#[cfg(windows)]
+mod boot_clock {
+    #[link(name = "kernel32")]
+    extern "system" {
+        pub fn GetTickCount64() -> u64;
+    }
+}
+
+/// فقط وقتی که برنامه در واقع توسط ویندوز راهاندازی شده است اجرا شود،
+/// نه هر بار که کاربر برنامه را دوباره باز میکند. آستانه: ۱۰ دقیقه از بوت.
+#[cfg(windows)]
+fn recently_booted() -> bool {
+    let uptime_ms = unsafe { boot_clock::GetTickCount64() };
+    uptime_ms < 10 * 60 * 1000
+}
+
+#[cfg(not(windows))]
+fn recently_booted() -> bool {
+    false
+}
+
+async fn run_startup_backups(app: AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+    // کمی صبر میکنیم تا شبکه و درایوها بالا بیایند.
+    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+    if !recently_booted() {
+        return;
+    }
+    let state = app.state::<AppState>();
+    let profiles = match profiles::load(&state.root) {
+        Ok(list) => list,
+        Err(_) => return,
+    };
+    for profile in profiles.into_iter().filter(|p| p.run_on_startup) {
+        // هر اجرا کاملا تمام میشود سپس سراغ پروفایل بعدی میرویم.
+        // رمز شبکه در این اجرا وجود ندارد و حذف دستهجمعی آینه رد میشود.
+        if let Err(e) = robocopy::start_run(
+            app.clone(),
+            state.root.clone(),
+            state.running.clone(),
+            profile,
+            None,
+            false,
+        )
+        .await
+        {
+            let _ = app
+                .notification()
+                .builder()
+                .title(settings::tr(
+                    "بکاپ هنگام روشن شدن ویندوز انجام نشد",
+                    "Startup backup failed",
+                ))
+                .body(e)
+                .show();
+        }
+    }
+}
+
+// ------------------------------------------------------------------
 // Commands (PLAN §8)
 // ------------------------------------------------------------------
 
@@ -243,24 +330,131 @@ fn open_repo_url() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_settings() -> Result<settings::Settings, String> {
+fn get_settings() -> Result<settings::ClientSettings, String> {
     let mut settings = settings::load();
     settings.auto_start = settings::is_auto_start_enabled();
-    Ok(settings)
+    Ok(settings::ClientSettings::from(&settings))
 }
 
 #[tauri::command]
-fn set_auto_start(enabled: bool) -> Result<settings::Settings, String> {
-    settings::set_auto_start(enabled)
+fn set_auto_start(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<settings::ClientSettings, String> {
+    ensure_unlocked(&state)?;
+    settings::set_auto_start(enabled).map(|s| settings::ClientSettings::from(&s))
 }
 
 #[tauri::command]
-fn set_language(language: String) -> Result<settings::Settings, String> {
-    settings::set_language(&language)
+fn set_language(language: String) -> Result<settings::ClientSettings, String> {
+    settings::set_language(&language).map(|s| settings::ClientSettings::from(&s))
+}
+
+// -------------------------------
+// قفل ورود به برنامه
+// -------------------------------
+
+#[tauri::command]
+fn unlock_app(state: State<'_, AppState>, password: String) -> Result<settings::ClientSettings, String> {
+    let settings = settings::load();
+    let Some(hash) = settings.password_hash.as_deref() else {
+        state.unlocked.store(true, Ordering::SeqCst);
+        return Ok(settings::ClientSettings::from(&settings));
+    };
+    if !security::verify_secret(&password, hash) {
+        return Err(settings::tr("رمز اشتباه است.", "Incorrect password."));
+    }
+    state.unlocked.store(true, Ordering::SeqCst);
+    Ok(settings::ClientSettings::from(&settings))
+}
+
+#[tauri::command]
+fn unlock_with_recovery(
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<settings::ClientSettings, String> {
+    let settings = settings::load();
+    let Some(hash) = settings.recovery_hash.as_deref() else {
+        return Err(settings::tr(
+            "کد بازیابی تنظیم نشده است.",
+            "No recovery code has been set.",
+        ));
+    };
+    let normalized = code.trim().to_uppercase().replace([' ', '-'], "");
+    if normalized.len() != 16 || !security::verify_secret(&normalized, hash) {
+        return Err(settings::tr(
+            "کد بازیابی معتبر نیست.",
+            "Invalid recovery code.",
+        ));
+    }
+    state.unlocked.store(true, Ordering::SeqCst);
+    Ok(settings::ClientSettings::from(&settings))
+}
+
+#[tauri::command]
+fn lock_app(state: State<'_, AppState>) -> Result<settings::ClientSettings, String> {
+    state.unlocked.store(false, Ordering::SeqCst);
+    let settings = settings::load();
+    Ok(settings::ClientSettings::from(&settings))
+}
+
+#[tauri::command]
+fn set_app_password(
+    state: State<'_, AppState>,
+    current: Option<String>,
+    new_password: String,
+) -> Result<PasswordSetupResult, String> {
+    let mut settings = settings::load();
+    if let Some(existing) = settings.password_hash.as_deref() {
+        let current = current.unwrap_or_default();
+        if !security::verify_secret(&current, existing) {
+            return Err(settings::tr("رمز فعلی اشتباه است.", "Current password is incorrect."));
+        }
+    }
+    if new_password.len() < 4 || new_password.len() > 200 {
+        return Err(settings::tr(
+            "رمز جدید باید حداقل ۴ و حداکثر ۲۰۰ کاراکتر باشد.",
+            "The new password must be 4 to 200 characters.",
+        ));
+    }
+
+    let password_hash = security::hash_secret(&new_password)?;
+    let recovery_code = security::generate_recovery_code();
+    let recovery_hash = security::hash_secret(&recovery_code)?;
+    settings.password_hash = Some(password_hash);
+    settings.recovery_hash = Some(recovery_hash);
+    settings.auto_start = settings::is_auto_start_enabled();
+    settings::save(&settings)?;
+    state.unlocked.store(true, Ordering::SeqCst);
+    Ok(PasswordSetupResult {
+        recovery_code,
+        settings: settings::ClientSettings::from(&settings),
+    })
+}
+
+#[tauri::command]
+fn remove_app_password(
+    state: State<'_, AppState>,
+    current: String,
+) -> Result<settings::ClientSettings, String> {
+    let mut settings = settings::load();
+    let Some(existing) = settings.password_hash.as_deref() else {
+        return Ok(settings::ClientSettings::from(&settings));
+    };
+    if !security::verify_secret(&current, existing) {
+        return Err(settings::tr("رمز فعلی اشتباه است.", "Current password is incorrect."));
+    }
+    settings.password_hash = None;
+    settings.recovery_hash = None;
+    settings.auto_start = settings::is_auto_start_enabled();
+    settings::save(&settings)?;
+    state.unlocked.store(true, Ordering::SeqCst);
+    Ok(settings::ClientSettings::from(&settings))
 }
 
 #[tauri::command]
 fn delete_profile(state: State<'_, AppState>, profile_id: String) -> Result<Vec<Profile>, String> {
+    ensure_unlocked(&state)?;
     let id = profile_id.trim();
     if id.is_empty() {
         return Err(settings::tr(
@@ -274,11 +468,13 @@ fn delete_profile(state: State<'_, AppState>, profile_id: String) -> Result<Vec<
 
 #[tauri::command]
 async fn load_profiles(state: State<'_, AppState>) -> Result<Vec<Profile>, String> {
+    ensure_unlocked(&state)?;
     profiles::load(&state.root)
 }
 
 #[tauri::command]
 async fn save_profile(state: State<'_, AppState>, profile: Profile) -> Result<(), String> {
+    ensure_unlocked(&state)?;
     validate_profile(&profile)?;
     profiles::upsert(&state.root, profile)
 }
@@ -291,6 +487,7 @@ async fn preview_changes(
 ) -> Result<PreviewResult, String> {
     // پیش‌نمایش هم جای «در حال اجرا» را می‌گیرد (P0-4) تا شروع بکاپ وسط
     // آن ممکن نشود؛ لاگ موقتی یکتا داخل preview_run ساخته می‌شود.
+    ensure_unlocked(&state)?;
     let (handle, guard) = robocopy::register_run(&state.running, "preview")?;
     let res = robocopy::preview_run(&profile, password.as_deref(), &handle, &state.root).await;
     drop(guard); // آزادسازی جایگاه
@@ -305,6 +502,7 @@ async fn start_backup(
     password: Option<String>,
     allow_mass_delete: Option<bool>,
 ) -> Result<String, String> {
+    ensure_unlocked(&state)?;
     validate_profile(&profile)?;
     robocopy::start_run(
         app,
@@ -319,6 +517,7 @@ async fn start_backup(
 
 #[tauri::command]
 async fn cancel_backup(state: State<'_, AppState>, run_id: Option<String>) -> Result<(), String> {
+    ensure_unlocked(&state)?;
     let cell = state.running.lock().unwrap();
     match cell.as_ref() {
         Some(h) => {
@@ -345,6 +544,7 @@ async fn cancel_backup(state: State<'_, AppState>, run_id: Option<String>) -> Re
 
 #[tauri::command]
 async fn list_history(state: State<'_, AppState>) -> Result<Vec<history::RunSummary>, String> {
+    ensure_unlocked(&state)?;
     history::load(&state.root)
 }
 
@@ -358,6 +558,7 @@ fn valid_run_id(run_id: &str) -> bool {
 
 #[tauri::command]
 async fn read_log(state: State<'_, AppState>, run_id: String) -> Result<String, String> {
+    ensure_unlocked(&state)?;
     if !valid_run_id(&run_id) {
         return Err(settings::tr("شناسه اجرا نامعتبر است.", "Invalid run ID."));
     }
@@ -374,6 +575,7 @@ async fn read_log(state: State<'_, AppState>, run_id: String) -> Result<String, 
 /// سابقهٔ فایل‌های منتقل‌شده به _Deleted برای یک اجرا (P0-6c).
 #[tauri::command]
 async fn read_moved(state: State<'_, AppState>, run_id: String) -> Result<Option<String>, String> {
+    ensure_unlocked(&state)?;
     if !valid_run_id(&run_id) {
         return Err(settings::tr("شناسه اجرا نامعتبر است.", "Invalid run ID."));
     }
@@ -390,7 +592,8 @@ async fn read_moved(state: State<'_, AppState>, run_id: String) -> Result<Option
 }
 
 #[tauri::command]
-async fn check_path(path: String) -> Result<CheckPathResult, String> {
+async fn check_path(state: State<'_, AppState>, path: String) -> Result<CheckPathResult, String> {
+    ensure_unlocked(&state)?;
     // UNC در دسترس‌ناپذیر تا ۲۰-۴۰ ثانیه metadata را قفل می‌کند → تایم‌اوت (P0-5)
     Ok(robocopy::check_path_timeout(path).await)
 }
@@ -494,13 +697,22 @@ fn main() {
             get_settings,
             set_auto_start,
             set_language,
+            unlock_app,
+            unlock_with_recovery,
+            lock_app,
+            set_app_password,
+            remove_app_password,
             open_repo_url,
             delete_profile,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                run_scheduler(handle).await;
+                run_scheduler(handle.clone()).await;
+            });
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                run_startup_backups(handle).await;
             });
             Ok(())
         })

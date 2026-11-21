@@ -14,8 +14,10 @@ It wraps **Robocopy**, keeps **Persian RTL / English LTR** UI, and supports **in
 - Preview before backup and live run log
 - Up to three saved profiles
 - Daily / weekly scheduled backup or check-only run
+- Backup on every Windows startup (per profile)
+- Optional app password with a one-time recovery code (PBKDF2-SHA256, never stored in plain text)
 - Optional Windows startup via current-user Run key
-- No stored passwords
+- Network passwords are never stored — kept only in memory
 
 ## Requirements
 
@@ -36,7 +38,7 @@ cargo tauri build
 Installer:
 
 ```text
-src-tauri\target\release\bundle\nsis\BackupSync_2.1.0_x64-setup.exe
+src-tauri\target\release\bundle\nsis\BackupSync_3.0.0_x64-setup.exe
 ```
 
 ## Data

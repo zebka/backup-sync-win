@@ -29,6 +29,8 @@ const state = {
   mirrorAcked: localStorage.getItem("mirror_ack") === "1",
   allowMassDelete: false,
   advancedWasOpen: false,
+  passwordEnabled: false,
+  unlocked: true,
 };
 
 let passwordMem = null;
@@ -118,6 +120,15 @@ function applyI18n() {
     el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel));
   });
   $("mode-hint").textContent = modeHint($("mode").value);
+
+  // متنهای پویا مربوط به امنیت
+  if ($("security-status")) {
+    $("security-status").textContent = t(state.passwordEnabled ? "security.statusOn" : "security.statusOff");
+    $("btn-set-password").textContent = t(state.passwordEnabled ? "security.change" : "security.set");
+    $("security-current").parentElement.hidden = !state.passwordEnabled;
+    $("btn-remove-password").hidden = !state.passwordEnabled;
+    $("btn-lock").hidden = !state.passwordEnabled || !state.unlocked;
+  }
 }
 
 function applyLanguageToDynamic() {
@@ -226,6 +237,7 @@ function newProfileForm() {
     excludes: DEFAULT_EXCLUDES.split("\n"),
     networkUser: "",
     threads: 8,
+    runOnStartup: false,
   });
   renderProfiles();
 }
@@ -250,6 +262,7 @@ function fillForm(p) {
   $("schedule-frequency").value = p.scheduleFrequency || "daily";
   $("schedule-time").value = p.scheduleTime || "21:30";
   $("schedule-weekday").value = String(p.scheduleWeekday ?? 0);
+  $("run-on-startup").checked = Boolean(p.runOnStartup);
   updateScheduleUI();
   applyI18n();
 }
@@ -288,6 +301,7 @@ function collectForm() {
     scheduleFrequency: $("schedule-frequency").value,
     scheduleTime: $("schedule-time").value,
     scheduleWeekday: parseInt($("schedule-weekday").value, 10) || 0,
+    runOnStartup: $("run-on-startup").checked,
   };
 }
 
@@ -753,6 +767,175 @@ function switchView(name) {
   });
 }
 
+// ----------------------------------------------------------------
+// قفل ورود و تنظیمات رمز
+// ----------------------------------------------------------------
+function showLockError(message) {
+  $("lock-error").textContent = message || "";
+}
+
+async function doUnlock() {
+  showLockError("");
+  const password = $("lock-password").value;
+  if (!password) {
+    showLockError(t("error.securityCurrent"));
+    return;
+  }
+  const btn = $("btn-unlock");
+  setLoading(btn, true);
+  try {
+    const settings = await invoke("unlock_app", { password });
+    state.passwordEnabled = Boolean(settings.passwordEnabled);
+    await enterApp();
+    $("lock-password").value = "";
+  } catch (e) {
+    showLockError(esc(String(e)));
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function doUnlockRecovery() {
+  showLockError("");
+  const code = $("recovery-code").value.trim();
+  if (!code) {
+    showLockError(t("error.securityCurrent"));
+    return;
+  }
+  const btn = $("btn-unlock-code");
+  setLoading(btn, true);
+  try {
+    const settings = await invoke("unlock_with_recovery", { code });
+    state.passwordEnabled = Boolean(settings.passwordEnabled);
+    await enterApp();
+    $("recovery-code").value = "";
+    $("recovery-box").hidden = true;
+  } catch (e) {
+    showLockError(esc(String(e)));
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function openSecurity() {
+  $("security-overlay").hidden = false;
+  $("security-error").textContent = "";
+  $("recovery-result").hidden = true;
+  $("security-current").value = "";
+  $("security-new").value = "";
+  $("security-confirm").value = "";
+  applyI18n();
+}
+
+async function doSetPassword() {
+  const err = $("security-error");
+  err.textContent = "";
+  const newPassword = $("security-new").value;
+  if (newPassword !== $("security-confirm").value) {
+    err.textContent = t("error.securityMismatch");
+    return;
+  }
+  if (newPassword.length < 4) {
+    err.textContent = t("error.securityShort");
+    return;
+  }
+  const current = state.passwordEnabled ? $("security-current").value : null;
+  if (state.passwordEnabled && !current) {
+    err.textContent = t("error.securityCurrent");
+    return;
+  }
+  try {
+    const res = await invoke("set_app_password", { current, newPassword });
+    state.passwordEnabled = Boolean(res.settings.passwordEnabled);
+    state.unlocked = true;
+    $("recovery-code-text").textContent = res.recoveryCode;
+    $("recovery-result").hidden = false;
+    $("security-current").value = "";
+    $("security-new").value = "";
+    $("security-confirm").value = "";
+    $("security-status").textContent = t("security.setOk");
+    applyI18n();
+  } catch (e) {
+    err.textContent = esc(String(e));
+  }
+}
+
+async function doRemovePassword() {
+  const err = $("security-error");
+  err.textContent = "";
+  const current = $("security-current").value;
+  if (!current) {
+    err.textContent = t("error.securityCurrent");
+    return;
+  }
+  try {
+    const settings = await invoke("remove_app_password", { current });
+    state.passwordEnabled = Boolean(settings.passwordEnabled);
+    state.unlocked = true;
+    $("security-status").textContent = t("security.removedOk");
+    $("recovery-result").hidden = true;
+    $("security-current").value = "";
+    applyI18n();
+  } catch (e) {
+    err.textContent = esc(String(e));
+  }
+}
+
+async function lockNow() {
+  try {
+    await invoke("lock_app");
+    state.unlocked = false;
+    $("security-overlay").hidden = true;
+    $("app").hidden = true;
+    $("lock-overlay").hidden = false;
+    $("recovery-box").hidden = true;
+    showLockError("");
+    $("lock-password").value = "";
+    setTimeout(() => $("lock-password").focus(), 100);
+    applyI18n();
+  } catch (e) {
+    showBanner("error", esc(String(e)));
+  }
+}
+
+async function switchLanguage() {
+  const next = LANG === "fa" ? "en" : "fa";
+  try {
+    const settings = await invoke("set_language", { language: next });
+    LANG = settings.language === "fa" ? "fa" : "en";
+    applyAll();
+    if (state.unlocked) {
+      showBanner("info", LANG === "fa" ? "زبان به فارسی تغییر کرد ✓" : "Language switched to English ✓");
+      setTimeout(clearBanner, 2500);
+    }
+  } catch (e) {
+    if (state.unlocked) showBanner("error", esc(String(e)));
+    else showLockError(esc(String(e)));
+  }
+}
+
+async function enterApp() {
+  $("lock-overlay").hidden = true;
+  $("security-overlay").hidden = true;
+  $("app").hidden = false;
+  state.unlocked = true;
+  applyAll();
+  try {
+    const settings = await invoke("get_settings");
+    $("auto-start").checked = Boolean(settings.autoStart);
+    state.passwordEnabled = Boolean(settings.passwordEnabled);
+  } catch {}
+  try {
+    const profiles = await invoke("load_profiles");
+    state.profiles = profiles.slice(0, 3);
+    if (state.profiles.length) selectProfile(state.profiles[0].id);
+    else newProfileForm();
+  } catch (e) {
+    newProfileForm();
+    showBanner("error", `${t("error.saveProfile")}: ${esc(String(e))}`);
+  }
+}
+
 function wireUI() {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.onclick = () => {
@@ -806,18 +989,37 @@ function wireUI() {
     }
   });
 
-  $("btn-language").onclick = async () => {
-    const next = LANG === "fa" ? "en" : "fa";
-    try {
-      const settings = await invoke("set_language", { language: next });
-      LANG = settings.language === "fa" ? "fa" : "en";
-      applyAll();
-      showBanner("info", LANG === "fa" ? "زبان به فارسی تغییر کرد ✓" : "Language switched to English ✓");
-      setTimeout(clearBanner, 2500);
-    } catch (e) {
-      showBanner("error", esc(String(e)));
-    }
+  $("btn-language").onclick = switchLanguage;
+  $("btn-lock-language").onclick = switchLanguage;
+
+  $("btn-security").onclick = openSecurity;
+  $("btn-close-security").onclick = () => { $("security-overlay").hidden = true; };
+  $("security-overlay").onclick = (e) => {
+    if (e.target === $("security-overlay")) $("security-overlay").hidden = true;
   };
+  $("btn-set-password").onclick = doSetPassword;
+  $("btn-remove-password").onclick = doRemovePassword;
+  $("btn-copy-recovery").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText($("recovery-code-text").textContent);
+      $("security-status").textContent = t("security.copied");
+      applyI18n();
+    } catch {}
+  };
+  $("btn-lock").onclick = lockNow;
+
+  $("btn-unlock").onclick = doUnlock;
+  $("btn-unlock-code").onclick = doUnlockRecovery;
+  $("btn-forgot").onclick = () => {
+    $("recovery-box").hidden = !$("recovery-box").hidden;
+    showLockError("");
+  };
+  $("lock-password").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doUnlock();
+  });
+  $("recovery-code").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doUnlockRecovery();
+  });
 
   $("btn-github").addEventListener("click", (e) => {
     e.preventDefault();
@@ -839,7 +1041,19 @@ function wireUI() {
       await invoke("save_profile", { profile });
       state.profileId = profile.id;
       await reloadProfiles(profile.id);
-      showBanner("info", t("banner.saved"));
+      if (profile.runOnStartup) {
+        // بدون اجرای خودکار برنامه، بکاپ هنگام روشن شدن ویندوز معنایی ندارد
+        const current = await invoke("get_settings");
+        if (!current.autoStart) {
+          const updated = await invoke("set_auto_start", { enabled: true });
+          $("auto-start").checked = Boolean(updated.autoStart);
+          showBanner("info", t("banner.autoStartOn"));
+        } else {
+          showBanner("info", t("banner.startupSaved"));
+        }
+      } else {
+        showBanner("info", t("banner.saved"));
+      }
       setTimeout(clearBanner, 2500);
     } catch (e) {
       showBanner("error", esc(String(e)));
@@ -869,33 +1083,27 @@ async function init() {
   wireUI();
   wireEvents();
 
+  let settings = null;
   try {
-    const settings = await invoke("get_settings");
+    settings = await invoke("get_settings");
     LANG = settings.language === "fa" ? "fa" : "en";
   } catch {
     LANG = "en";
   }
+  state.passwordEnabled = Boolean(settings && settings.passwordEnabled);
+  state.unlocked = !state.passwordEnabled;
   $("btn-language").textContent = t("language.switch");
-  $("auto-start").checked = false;
   applyAll();
 
-  try {
-    const settingsAgain = await invoke("get_settings");
-    $("auto-start").checked = Boolean(settingsAgain.autoStart);
-  } catch {}
-
-  try {
-    const profiles = await invoke("load_profiles");
-    state.profiles = profiles.slice(0, 3);
-    if (state.profiles.length) {
-      selectProfile(state.profiles[0].id);
-    } else {
-      newProfileForm();
-    }
-  } catch (e) {
-    newProfileForm();
-    showBanner("error", `${t("error.saveProfile")}: ${esc(String(e))}`);
+  if (state.passwordEnabled) {
+    $("app").hidden = true;
+    $("lock-overlay").hidden = false;
+    $("recovery-box").hidden = true;
+    showLockError("");
+    setTimeout(() => $("lock-password").focus(), 100);
+    return;
   }
+  await enterApp();
 }
 
 init();

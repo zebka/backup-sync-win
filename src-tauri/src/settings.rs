@@ -1,5 +1,6 @@
-//! تنظیمات برنامه (زبان + راه‌اندازی با ویندوز).
-//! ریجستری فقط برای وضعیت auto-start منبع حقیقت است؛ زبان در settings.json نگه‌داری می‌شود.
+//! تنظیمات برنامه (زبان + راهاندازی با ویندوز + قفل ورود).
+//! ریجستری فقط برای وضعیت auto-start منبع حقیقت است؛ بقیه در settings.json نگه داشته میشوند.
+//! هش رمز و کد بازیابی در JSON ذخیره میشوند، ولی هرگز به frontend فرستاده نمیشوند.
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -15,11 +16,41 @@ pub struct Settings {
     /// "fa" | "en"
     #[serde(default = "default_language")]
     pub language: String,
+    /// هش PBKDF2 رمز ورود برنامه — متن ساده هرگز ذخیره نمیشود.
+    #[serde(default)]
+    pub password_hash: Option<String>,
+    /// هش کد بازیابی تکدفعی (برای فراموشی رمز).
+    #[serde(default)]
+    pub recovery_hash: Option<String>,
+}
+
+/// تنها قسمتی از تنظیمات که به frontend فرستاده میشود.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientSettings {
+    pub auto_start: bool,
+    pub language: String,
+    pub password_enabled: bool,
+}
+
+impl From<&Settings> for ClientSettings {
+    fn from(s: &Settings) -> Self {
+        Self {
+            auto_start: s.auto_start,
+            language: s.language.clone(),
+            password_enabled: s.password_hash.is_some(),
+        }
+    }
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { auto_start: false, language: default_language() }
+        Self {
+            auto_start: false,
+            language: default_language(),
+            password_hash: None,
+            recovery_hash: None,
+        }
     }
 }
 

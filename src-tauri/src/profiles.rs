@@ -33,6 +33,9 @@ pub struct Profile {
     /// "backup" | "check"
     #[serde(default = "default_action")]
     pub schedule_action: String,
+    /// بکاپ خودکار هنگام روشن شدن ویندوز (جدا از زمانبندی ساعتی).
+    #[serde(default)]
+    pub run_on_startup: bool,
 }
 
 fn default_threads() -> u32 {
